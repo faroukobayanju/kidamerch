@@ -53,7 +53,9 @@ const emptyForm = (category: string): FormState => ({
   price: "",
   compareAtPrice: "",
   description: "",
-  status: "Draft",
+  // Adding a product almost always means putting it on sale, so publish by
+  // default. Draft stays available for anyone deliberately staging a listing.
+  status: "Active",
   stock: "0",
   variants: [],
   images: [],
@@ -502,7 +504,12 @@ function ProductsPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Status">
+            <Field
+              label="Status"
+              {...(form.status === "Draft"
+                ? { hint: "Drafts are hidden from shoppers. Choose Active to sell this." }
+                : {})}
+            >
               <select
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as ProductStatus })}
@@ -510,7 +517,7 @@ function ProductsPage() {
               >
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {s === "Draft" ? "Draft — hidden from shoppers" : s}
                   </option>
                 ))}
               </select>
