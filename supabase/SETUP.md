@@ -37,6 +37,11 @@ Environment Variables).
 
 ## 4. Create your admin account
 
+> **This step is not optional.** Postgres rejects every product write from an
+> account that is not listed in `public.admins`. Skip it and saving a product in
+> the dashboard fails, leaving the storefront empty. Run
+> `supabase/make-admin.sql` after creating the user.
+
 1. Dashboard → **Authentication** → **Users** → **Add user**. Use a real email
    and a strong password, and tick "Auto Confirm User".
 2. Copy the new user's **UID**.

@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import { CATEGORY_NAMES, setCatalogue, type Category, type Product } from "@/data/products";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import * as repo from "@/lib/repo";
@@ -349,13 +350,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const product = fromInput(input);
       // Optimistic insert, then reconcile with the database-generated row.
       patch((prev) => ({ ...prev, products: [product, ...prev.products] }));
-      void repo.insertProduct(product).then((saved) => {
-        if (saved) {
+      void repo.insertProduct(product).then((res) => {
+        if (res.ok) {
           patch((prev) => ({
             ...prev,
-            products: prev.products.map((p) => (p.id === product.id ? saved : p)),
+            products: prev.products.map((p) => (p.id === product.id ? res.data : p)),
           }));
+          return;
         }
+        if (!res.error) return; // Supabase not configured — local state is the source of truth.
+
+        // The row never reached Postgres. Undo the optimistic copy so the
+        // dashboard cannot show a product the storefront will never load.
+        patch((prev) => ({
+          ...prev,
+          products: prev.products.filter((p) => p.id !== product.id),
+        }));
+        toast.error("Product was not saved", { description: res.error });
       });
       return product;
     },
@@ -373,7 +384,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
           return next;
         }),
       }));
-      if (next) void repo.updateProductRow(id, next);
+      if (next) {
+        void repo.updateProductRow(id, next).then((res) => {
+          if (!res.ok && res.error) {
+            toast.error("Changes were not saved", { description: res.error });
+          }
+        });
+      }
     },
     [fromInput, patch],
   );
@@ -402,7 +419,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const deleteProducts = useCallback(
     (ids: string[]) => {
       patch((prev) => ({ ...prev, products: prev.products.filter((p) => !ids.includes(p.id)) }));
-      void repo.deleteProductRows(ids);
+      void repo.deleteProductRows(ids).then((res) => {
+        if (!res.ok && res.error) {
+          toast.error("Delete did not reach the database", { description: res.error });
+        }
+      });
     },
     [patch],
   );

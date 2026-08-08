@@ -31,6 +31,20 @@ type ProductRow = {
 
 const num = (v: string | number | null | undefined) => (v == null ? 0 : Number(v));
 
+/**
+ * Postgres refuses writes from anyone who is not in `public.admins`. That is the
+ * single most common reason a save appears to work but never persists, so it is
+ * worth translating into something a shop owner can act on.
+ */
+const RLS_VIOLATION = "42501";
+
+export function describeWriteError(error: { code?: string; message: string }): string {
+  if (error.code === RLS_VIOLATION) {
+    return "Your account is not on the admin allow-list, so the database rejected the save. Add your user id to the admins table.";
+  }
+  return error.message;
+}
+
 /** Postgres row → the shape the UI already understands. */
 function toProduct(row: ProductRow): AdminProduct {
   const variants = Array.isArray(row.variants) ? row.variants : [];
@@ -96,28 +110,39 @@ export async function fetchProducts(): Promise<AdminProduct[] | null> {
   return (data as ProductRow[]).map(toProduct);
 }
 
-export async function insertProduct(p: AdminProduct): Promise<AdminProduct | null> {
-  if (!supabase) return null;
+export type WriteResult<T> = { ok: true; data: T } | { ok: false; error: string };
+
+/** Supabase is not configured — the caller should stay on local state. */
+const OFFLINE = { ok: false, error: "" } as const;
+
+export async function insertProduct(p: AdminProduct): Promise<WriteResult<AdminProduct>> {
+  if (!supabase) return OFFLINE;
   const { data, error } = await supabase.from("products").insert(toRow(p)).select().single();
   if (error) {
     console.error("[repo] insertProduct", error.message);
-    return null;
+    return { ok: false, error: describeWriteError(error) };
   }
-  return toProduct(data as ProductRow);
+  return { ok: true, data: toProduct(data as ProductRow) };
 }
 
-export async function updateProductRow(id: string, p: AdminProduct): Promise<boolean> {
-  if (!supabase) return false;
+export async function updateProductRow(id: string, p: AdminProduct): Promise<WriteResult<true>> {
+  if (!supabase) return OFFLINE;
   const { error } = await supabase.from("products").update(toRow(p)).eq("id", id);
-  if (error) console.error("[repo] updateProductRow", error.message);
-  return !error;
+  if (error) {
+    console.error("[repo] updateProductRow", error.message);
+    return { ok: false, error: describeWriteError(error) };
+  }
+  return { ok: true, data: true };
 }
 
-export async function deleteProductRows(ids: string[]): Promise<boolean> {
-  if (!supabase || ids.length === 0) return false;
+export async function deleteProductRows(ids: string[]): Promise<WriteResult<true>> {
+  if (!supabase || ids.length === 0) return OFFLINE;
   const { error } = await supabase.from("products").delete().in("id", ids);
-  if (error) console.error("[repo] deleteProductRows", error.message);
-  return !error;
+  if (error) {
+    console.error("[repo] deleteProductRows", error.message);
+    return { ok: false, error: describeWriteError(error) };
+  }
+  return { ok: true, data: true };
 }
 
 /* --------------------------------------------------------------- storage */
