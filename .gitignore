@@ -38,3 +38,4 @@ dist-ssr
 
 # Editor scratch artifacts
 Attached Element Context from Integrated
+.env*.local

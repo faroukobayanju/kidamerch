@@ -1,48 +1,44 @@
 # Deploying to Vercel
 
-The repo is at <https://github.com/0xZorak/kidamerch>. Connecting it once gives
-you a deploy on every push to `main`.
+**Live:** <https://kidamerch.vercel.app> · Vercel project `zoraks-projects/kidamerch`
+· source at <https://github.com/0xZorak/kidamerch>
 
-## 1. Import the project
+Already done: the project is linked, `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_ANON_KEY` are set for Production and Development, and production
+has been deployed.
 
-<https://vercel.com/new> → **Import Git Repository** → pick `0xZorak/kidamerch`.
-Authorise Vercel for the repo if prompted (it is private).
+## Shipping a change
 
-Leave the build settings alone. Vercel reads the Build Output API directory this
-project produces (`.vercel/output`), so the defaults work:
+```bash
+git push zorak main    # save the code
+vercel deploy --prod   # publish it
+```
 
-| Setting       | Value           |
-| ------------- | --------------- |
-| Framework     | Other           |
-| Build command | `bun run build` |
-| Output        | _leave empty_   |
+To get a deploy automatically on every push instead, open the project in Vercel
+→ **Settings** → **Git** → connect `0xZorak/kidamerch`.
 
-## 2. Add the environment variables
+## Remaining setup
 
-Before the first deploy, open **Environment Variables** and add both, for all
-three environments (Production, Preview, Development):
+1. **Preview environment variables.** Production and Development are set;
+   Preview is not, because the CLI insists on asking which branch. Add the two
+   variables for Preview in **Settings → Environment Variables** if you want
+   branch previews to reach the database.
+2. **Supabase auth URLs.** Supabase → **Authentication** → **URL Configuration**
+   → set **Site URL** to `https://kidamerch.vercel.app` and add it under
+   **Redirect URLs**, so admin sign-in works on the live domain.
+
+## Environment variables
 
 ```
 VITE_SUPABASE_URL        https://<your-ref>.supabase.co
 VITE_SUPABASE_ANON_KEY   eyJhbGci...
 ```
 
-Copy the values from your local `.env`. Without them the site still loads but
-falls back to browser-only storage, so the admin dashboard and the live
-catalogue will look empty.
+Without them the site still loads but falls back to browser-only storage, so the
+catalogue and admin dashboard look empty.
 
 Only ever use the **anon public** key. The `service_role` key bypasses every
 security policy and must never be given to a frontend.
-
-## 3. Deploy, then point Supabase at the domain
-
-Hit **Deploy**. When it finishes, take the production URL and add it in Supabase
-→ **Authentication** → **URL Configuration**:
-
-- **Site URL**: your Vercel domain
-- **Redirect URLs**: add the same domain
-
-This keeps admin sign-in working on the deployed site.
 
 ## Notes
 
