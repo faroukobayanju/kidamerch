@@ -6,11 +6,17 @@ import { useStore } from "@/lib/store";
 import { formatPrice } from "@/data/products";
 import { QtyStepper } from "./QtyStepper";
 import { AnimatedNumber } from "./AnimatedNumber";
+import { WhatsAppIcon } from "./icons";
+import { buildOrderMessage, openWhatsApp } from "@/lib/whatsapp";
 import { EASE } from "./Reveal";
 
 export function CartDrawer() {
-  const { cartOpen, setCartOpen, lines, setQty, removeLine, subtotal, shipping, tax, total } =
-    useStore();
+  const { cartOpen, setCartOpen, lines, setQty, removeLine, subtotal, total } = useStore();
+
+  const orderOnWhatsApp = () => {
+    openWhatsApp(buildOrderMessage({ lines, totals: { subtotal, total } }));
+    setCartOpen(false);
+  };
 
   useEffect(() => {
     document.body.style.overflow = cartOpen ? "hidden" : "";
@@ -56,15 +62,13 @@ export function CartDrawer() {
               {lines.length === 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
                   <ShoppingBag size={28} className="text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Nothing in the bag yet. Drop 04 is live.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Nothing in the bag yet.</p>
                   <Link
                     to="/shop"
                     onClick={() => setCartOpen(false)}
                     className="eyebrow rounded-sm bg-primary px-6 py-3.5 text-primary-foreground"
                   >
-                    Shop the drop
+                    Shop the collection
                   </Link>
                 </div>
               ) : (
@@ -118,10 +122,7 @@ export function CartDrawer() {
 
             {lines.length > 0 && (
               <div className="shrink-0 border-t border-border px-5 py-5">
-                <Row label="Subtotal" value={subtotal} />
-                <Row label="Shipping (est.)" value={shipping} />
-                <Row label="Tax (est.)" value={tax} />
-                <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
+                <div className="flex items-center justify-between border-t border-border pt-3">
                   <span className="eyebrow">Total</span>
                   <AnimatedNumber
                     value={total}
@@ -129,13 +130,23 @@ export function CartDrawer() {
                     className="text-lg font-semibold tabular-nums text-primary"
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={orderOnWhatsApp}
+                  className="eyebrow mt-5 flex w-full items-center justify-center gap-2 rounded-sm bg-primary py-4 text-center text-primary-foreground transition-opacity duration-200 hover:opacity-90"
+                >
+                  <WhatsAppIcon size={16} /> Order on WhatsApp
+                </button>
                 <Link
                   to="/checkout"
                   onClick={() => setCartOpen(false)}
-                  className="eyebrow mt-5 block rounded-sm bg-primary py-4 text-center text-primary-foreground transition-opacity duration-200 hover:opacity-90"
+                  className="eyebrow mt-3 block rounded-sm border border-border py-4 text-center transition-colors duration-200 hover:bg-secondary"
                 >
-                  Proceed to checkout
+                  Add delivery details
                 </Link>
+                <p className="mt-3 text-center text-[11px] leading-relaxed text-muted-foreground">
+                  Delivery is quoted on WhatsApp — it varies by location.
+                </p>
                 <Link
                   to="/cart"
                   onClick={() => setCartOpen(false)}
@@ -149,18 +160,5 @@ export function CartDrawer() {
         </>
       )}
     </AnimatePresence>
-  );
-}
-
-function Row({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="flex items-center justify-between py-1 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <AnimatedNumber
-        value={value}
-        format={(n) => (n === 0 && label.startsWith("Shipping") ? "Free" : formatPrice(n))}
-        className="tabular-nums"
-      />
-    </div>
   );
 }

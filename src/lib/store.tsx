@@ -17,8 +17,7 @@ type StoreValue = {
   wishlist: string[];
   cartCount: number;
   subtotal: number;
-  shipping: number;
-  tax: number;
+  /** Same as subtotal — shipping is quoted per location over WhatsApp. */
   total: number;
   lines: { line: CartLine; product: Product }[];
   addToCart: (product: Product, variant?: string | null, qty?: number) => void;
@@ -34,8 +33,8 @@ type StoreValue = {
 
 const StoreContext = createContext<StoreValue | null>(null);
 
-const CART_KEY = "kurogane.cart";
-const WISH_KEY = "kurogane.wishlist";
+const CART_KEY = "kida.cart";
+const WISH_KEY = "kida.wishlist";
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -66,24 +65,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(WISH_KEY, JSON.stringify(wishlist));
   }, [wishlist, hydrated]);
 
-  const addToCart = useCallback(
-    (product: Product, variant: string | null = null, qty = 1) => {
-      setCart((prev) => {
-        const existing = prev.find((l) => l.id === product.id && l.variant === variant);
-        if (existing) {
-          return prev.map((l) =>
-            l.id === product.id && l.variant === variant ? { ...l, qty: l.qty + qty } : l,
-          );
-        }
-        return [...prev, { id: product.id, variant, qty }];
-      });
-      setBump((b) => b + 1);
-      toast.success("Added to cart", {
-        description: `${product.name}${variant ? ` · ${variant}` : ""}`,
-      });
-    },
-    [],
-  );
+  const addToCart = useCallback((product: Product, variant: string | null = null, qty = 1) => {
+    setCart((prev) => {
+      const existing = prev.find((l) => l.id === product.id && l.variant === variant);
+      if (existing) {
+        return prev.map((l) =>
+          l.id === product.id && l.variant === variant ? { ...l, qty: l.qty + qty } : l,
+        );
+      }
+      return [...prev, { id: product.id, variant, qty }];
+    });
+    setBump((b) => b + 1);
+    toast.success("Added to cart", {
+      description: `${product.name}${variant ? ` · ${variant}` : ""}`,
+    });
+  }, []);
 
   const setQty = useCallback((id: string, variant: string | null, qty: number) => {
     setCart((prev) =>
@@ -121,8 +117,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .filter(Boolean) as { line: CartLine; product: Product }[];
 
     const subtotal = lines.reduce((sum, l) => sum + l.product.price * l.line.qty, 0);
-    const shipping = subtotal === 0 ? 0 : subtotal > 250 ? 0 : 14;
-    const tax = Math.round(subtotal * 0.08 * 100) / 100;
 
     return {
       cart,
@@ -130,9 +124,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       cartCount: cart.reduce((n, l) => n + l.qty, 0),
       lines,
       subtotal,
-      shipping,
-      tax,
-      total: subtotal + shipping + tax,
+      total: subtotal,
       addToCart,
       setQty,
       removeLine,

@@ -19,10 +19,10 @@ import { useData } from "@/lib/data-store";
 export const Route = createFileRoute("/admin/categories")({
   head: () => ({
     meta: [
-      { title: "Categories — KidaMerch Operations" },
+      { title: "Categories — KIDA Operations" },
       {
         name: "description",
-        content: "Create, rename and remove catalogue categories for the KidaMerch storefront.",
+        content: "Create, rename and remove catalogue categories for the KIDA storefront.",
       },
     ],
   }),
@@ -30,13 +30,8 @@ export const Route = createFileRoute("/admin/categories")({
 });
 
 function CategoriesPage() {
-  const {
-    categories,
-    productCountByCategory,
-    createCategory,
-    renameCategory,
-    deleteCategory,
-  } = useData();
+  const { categories, productCountByCategory, createCategory, renameCategory, deleteCategory } =
+    useData();
 
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -45,10 +40,7 @@ function CategoriesPage() {
   const [reassign, setReassign] = useState("");
 
   const sorted = useMemo(() => [...categories].sort((a, b) => a.localeCompare(b)), [categories]);
-  const others = useMemo(
-    () => sorted.filter((c) => c !== confirm),
-    [sorted, confirm],
-  );
+  const others = useMemo(() => sorted.filter((c) => c !== confirm), [sorted, confirm]);
 
   const add = () => {
     if (!draft.trim()) return;
@@ -78,7 +70,10 @@ function CategoriesPage() {
         <Panel className="lg:col-span-2">
           <PanelHead title={`All categories (${sorted.length})`} />
           {sorted.length === 0 ? (
-            <EmptyState title="No categories yet" body="Add your first category to start grouping products." />
+            <EmptyState
+              title="No categories yet"
+              body="Add your first category to start grouping products."
+            />
           ) : (
             <ul className="divide-y divide-border">
               {sorted.map((c) => {
@@ -192,9 +187,7 @@ function CategoriesPage() {
         onConfirm={() => {
           if (confirm) {
             deleteCategory(confirm, reassign || undefined);
-            toast.success(
-              reassign ? `Products moved to ${reassign}` : `“${confirm}” deleted`,
-            );
+            toast.success(reassign ? `Products moved to ${reassign}` : `“${confirm}” deleted`);
           }
           setConfirm(null);
         }}

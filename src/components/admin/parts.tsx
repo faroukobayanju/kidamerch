@@ -32,9 +32,7 @@ export function Field({
 
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <section
-      className={`rounded-md border border-border bg-surface shadow-elevate ${className}`}
-    >
+    <section className={`rounded-md border border-border bg-surface shadow-elevate ${className}`}>
       {children}
     </section>
   );

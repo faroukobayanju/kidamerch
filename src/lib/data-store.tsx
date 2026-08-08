@@ -7,8 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { products as seedProducts, type Category, type Product } from "@/data/products";
-import { events as seedEvents, isUpcoming, type Event } from "@/data/events";
+import { CATEGORY_NAMES, setCatalogue, type Category, type Product } from "@/data/products";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import * as repo from "@/lib/repo";
 
 /* ------------------------------------------------------------------ types */
 
@@ -23,20 +24,8 @@ export type AdminProduct = Product & {
   variantStock: Record<string, number>;
 };
 
-export type EventStatus = "Upcoming" | "Past" | "Cancelled";
-
-export type AdminEvent = Event & {
-  status: EventStatus;
-  featured: boolean;
-};
-
 export type OrderStatus =
-  | "Pending"
-  | "Processing"
-  | "Shipped"
-  | "Delivered"
-  | "Cancelled"
-  | "Refunded";
+  "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled" | "Refunded";
 
 export type PaymentStatus = "Paid" | "Unpaid" | "Refunded";
 
@@ -91,135 +80,38 @@ export type ProductInput = {
   images: string[];
 };
 
-export type EventInput = {
-  name: string;
-  kind: Event["kind"];
-  date: string;
-  location: string;
-  description: string;
-  cover: string;
-  gallery: string[];
-  status: EventStatus;
-  featured: boolean;
+export type OrderDraft = Omit<Order, "id" | "createdAt" | "history" | "status" | "payment"> & {
+  id?: string;
 };
-
-export type OrderDraft = Omit<
-  Order,
-  "id" | "createdAt" | "history" | "status" | "payment"
-> & { id?: string };
 
 export const DEFAULT_LOW_STOCK_THRESHOLD = 8;
 export const NO_VARIANT_KEY = "—";
 
-/* ---------------------------------------------------------------- seeding */
-
-function lcg(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) % 4294967296;
-    return s / 4294967296;
-  };
-}
-
-function seedProductList(): AdminProduct[] {
-  const rand = lcg(42);
-  return seedProducts.map((p) => {
-    const labels = p.variants.length ? p.variants : [NO_VARIANT_KEY];
-    const variantStock: Record<string, number> = {};
-    for (const label of labels) {
-      variantStock[label] = p.inStock ? Math.round(2 + rand() * 22) : 0;
-    }
-    const stock = Object.values(variantStock).reduce((a, b) => a + b, 0);
-    return {
-      ...p,
-      stock,
-      compareAtPrice: rand() > 0.7 ? Math.round(p.price * 1.25) : null,
-      status: p.inStock ? ("Active" as ProductStatus) : ("Out of Stock" as ProductStatus),
-      updatedAt: p.createdAt,
-      variantStock,
-    };
-  });
-}
-
-function seedEventList(): AdminEvent[] {
-  return seedEvents.map((e, i) => ({
-    ...e,
-    status: isUpcoming(e.date) ? "Upcoming" : "Past",
-    featured: i < 3 && isUpcoming(e.date),
-  }));
-}
-
-const NAMES = [
-  ["Mika Tanaka", "mika.tanaka@example.com", "14 Sakura Lane, Tokyo, JP"],
-  ["Jonas Weber", "jonas.weber@example.com", "9 Kreuzberg Str., Berlin, DE"],
-  ["Amara Osei", "amara.osei@example.com", "42 Marina Rd., Lagos, NG"],
-  ["Elena Ruiz", "elena.ruiz@example.com", "77 Calle Sur, Madrid, ES"],
-  ["Owen Park", "owen.park@example.com", "310 Dundas St W, Toronto, CA"],
-  ["Sofia Lima", "sofia.lima@example.com", "5 Rua Alta, Lisbon, PT"],
-  ["Dean Whitfield", "dean.whitfield@example.com", "88 Ludgate Hill, London, UK"],
-  ["Nina Kovač", "nina.kovac@example.com", "12 Dockside, Rotterdam, NL"],
-];
-
+/** Order status progression used by "advance order". */
 const FLOW: OrderStatus[] = ["Pending", "Processing", "Shipped", "Delivered"];
 
-function seedOrderList(list: AdminProduct[]): Order[] {
-  const rand = lcg(1337);
-  const orders: Order[] = [];
-  for (let i = 0; i < 24; i++) {
-    const person = NAMES[i % NAMES.length]!;
-    const itemCount = 1 + Math.floor(rand() * 3);
-    const items: OrderItem[] = [];
-    for (let j = 0; j < itemCount; j++) {
-      const p = list[Math.floor(rand() * list.length)]!;
-      items.push({
-        productId: p.id,
-        name: p.name,
-        image: p.images[0]!,
-        variant: p.variants[0] ?? null,
-        qty: 1 + Math.floor(rand() * 2),
-        price: p.price,
-      });
-    }
-    const subtotal = items.reduce((s, it) => s + it.price * it.qty, 0);
-    const shipping = subtotal > 250 ? 0 : 14;
-    const tax = Math.round(subtotal * 0.08 * 100) / 100;
-    const day = new Date(2026, 6, 30 - i * 1.2).toISOString();
-    const roll = rand();
-    const status: OrderStatus =
-      roll > 0.93 ? "Cancelled" : FLOW[Math.min(3, Math.floor(i / 3))] ?? "Pending";
-    orders.push({
-      id: `KG-${2400 + i}`,
-      customerName: person[0]!,
-      customerEmail: person[1]!,
-      address: person[2]!,
-      createdAt: day,
-      items,
-      subtotal,
-      shipping,
-      tax,
-      total: subtotal + shipping + tax,
-      payment: status === "Cancelled" ? "Unpaid" : "Paid",
-      status,
-      tracking: status === "Shipped" || status === "Delivered" ? `KGX${918000 + i}DE` : null,
-      reason: null,
-      history: [{ at: day, label: "Order placed" }],
-    });
-  }
-  return orders;
-}
+/** Result of an admin sign-in attempt. */
+export type LoginResult = { ok: boolean; error?: string | undefined };
 
-export function makeSalesSeries(days: number) {
-  const rand = lcg(days === 7 ? 7 : 30);
+/* ------------------------------------------------------------ sales series */
+
+/**
+ * Real revenue per day, derived from actual orders. Days with no orders read
+ * zero rather than inventing a number, so the chart reflects the real store.
+ */
+export function makeSalesSeries(days: number, orders: Order[] = []) {
   const out: { label: string; revenue: number; orders: number }[] = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const base = days === 7 ? 2200 : 1800;
-    const revenue = Math.round(base + rand() * 2600);
+    const key = d.toDateString();
+    const dayOrders = orders.filter(
+      (o) => new Date(o.createdAt).toDateString() === key && o.status !== "Cancelled",
+    );
     out.push({
       label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      revenue,
-      orders: Math.max(1, Math.round(revenue / 240)),
+      revenue: dayOrders.reduce((s, o) => s + o.total, 0),
+      orders: dayOrders.length,
     });
   }
   return out;
@@ -229,28 +121,22 @@ export function makeSalesSeries(days: number) {
 
 type Persisted = {
   products: AdminProduct[];
-  events: AdminEvent[];
   orders: Order[];
   adjustments: StockAdjustment[];
   categories: string[];
   lowStockThreshold: number;
 };
 
+const KEY = "kida.data.v1";
+const SESSION_KEY = "kida.admin.session";
 
-const KEY = "kurogane.data.v1";
-const SESSION_KEY = "kurogane.admin.session";
-
-export const ADMIN_EMAIL = "admin@store.com";
-export const ADMIN_PASSWORD = "admin123";
-
+/** A brand-new store: no products, no orders, no fake metrics. */
 function initial(): Persisted {
-  const products = seedProductList();
   return {
-    products,
-    events: seedEventList(),
-    orders: seedOrderList(products),
+    products: [],
+    orders: [],
     adjustments: [],
-    categories: Array.from(new Set(products.map((p) => p.category as string))),
+    categories: [...CATEGORY_NAMES],
     lowStockThreshold: DEFAULT_LOW_STOCK_THRESHOLD,
   };
 }
@@ -269,8 +155,8 @@ const sumStock = (v: Record<string, number>) => Object.values(v).reduce((a, b) =
 type DataValue = Persisted & {
   ready: boolean;
   isAdmin: boolean;
-  login: (email: string, password: string) => boolean;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  logout: () => Promise<void>;
   getProductById: (id: string) => AdminProduct | undefined;
   storefrontProducts: AdminProduct[];
   categories: string[];
@@ -285,10 +171,6 @@ type DataValue = Persisted & {
   duplicateProduct: (id: string) => void;
   deleteProducts: (ids: string[]) => void;
   bulkStatus: (ids: string[], status: ProductStatus) => void;
-  createEvent: (input: EventInput) => void;
-  updateEvent: (id: string, input: EventInput) => void;
-  deleteEvent: (id: string) => void;
-  toggleFeatured: (id: string) => boolean;
   setVariantStock: (productId: string, variant: string, qty: number) => void;
   adjustStock: (
     productId: string,
@@ -317,7 +199,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (parsed?.products?.length) {
           setState({
             products: parsed.products,
-            events: parsed.events ?? seedEventList(),
             orders: parsed.orders ?? [],
             adjustments: parsed.adjustments ?? [],
             categories:
@@ -327,12 +208,60 @@ export function DataProvider({ children }: { children: ReactNode }) {
           });
         }
       }
-      setIsAdmin(localStorage.getItem(SESSION_KEY) === "1");
+      if (!isSupabaseConfigured) {
+        setIsAdmin(localStorage.getItem(SESSION_KEY) === "1");
+      }
     } catch {
       /* ignore malformed storage */
     }
     setReady(true);
   }, []);
+
+  /**
+   * Restore an existing Supabase session and confirm the user is on the admin
+   * allow-list. Membership is re-checked against the database on every load,
+   * so revoking access in Supabase takes effect immediately.
+   */
+  useEffect(() => {
+    if (!supabase) return;
+
+    const verify = async (userId: string | undefined) => {
+      if (!userId) {
+        setIsAdmin(false);
+        return;
+      }
+      const { data } = await supabase!.from("admins").select("id").eq("id", userId).maybeSingle();
+      setIsAdmin(Boolean(data));
+    };
+
+    supabase.auth.getSession().then(({ data }) => verify(data.session?.user.id));
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      void verify(session?.user.id);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  /** Load the live catalogue from Postgres; falls back to local state on error. */
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    void repo.fetchProducts().then((rows) => {
+      if (rows) setState((prev) => ({ ...prev, products: rows }));
+    });
+  }, []);
+
+  /** Orders are admin-only under RLS, so refetch whenever admin status changes. */
+  useEffect(() => {
+    if (!isSupabaseConfigured || !isAdmin) return;
+    void repo.fetchOrders().then((rows) => {
+      if (rows) setState((prev) => ({ ...prev, orders: rows }));
+    });
+  }, [isAdmin]);
+
+  /** Keep the non-reactive registry in sync so cart/wishlist can resolve ids. */
+  useEffect(() => {
+    setCatalogue(state.products);
+  }, [state.products]);
 
   useEffect(() => {
     if (!ready) return;
@@ -345,55 +274,89 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const patch = useCallback((fn: (prev: Persisted) => Persisted) => setState(fn), []);
 
-  const login = useCallback((email: string, password: string) => {
-    const ok = email.trim().length > 0 && password.length > 0;
-    if (ok) {
-      localStorage.setItem(SESSION_KEY, "1");
-      setIsAdmin(true);
+  const login = useCallback(async (email: string, password: string): Promise<LoginResult> => {
+    // Local fallback for development before Supabase credentials are added.
+    if (!supabase) {
+      const ok = email.trim().length > 0 && password.length > 0;
+      if (ok) {
+        localStorage.setItem(SESSION_KEY, "1");
+        setIsAdmin(true);
+      }
+      return { ok, error: ok ? undefined : "Enter an email and password." };
     }
-    return ok;
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error || !data.user) {
+      return { ok: false, error: error?.message ?? "Sign in failed." };
+    }
+
+    // Authenticated — but only allow-listed users may enter the dashboard.
+    const { data: admin } = await supabase
+      .from("admins")
+      .select("id")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (!admin) {
+      await supabase.auth.signOut();
+      setIsAdmin(false);
+      return { ok: false, error: "This account does not have admin access." };
+    }
+
+    setIsAdmin(true);
+    return { ok: true };
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    if (supabase) await supabase.auth.signOut();
     localStorage.removeItem(SESSION_KEY);
     setIsAdmin(false);
   }, []);
 
-  const fromInput = useCallback(
-    (input: ProductInput, base?: AdminProduct): AdminProduct => {
-      const variantStock: Record<string, number> = {};
-      if (input.variants.length) {
-        for (const v of input.variants) variantStock[v.label] = Math.max(0, v.stock);
-      } else {
-        variantStock[NO_VARIANT_KEY] = Math.max(0, input.stock);
-      }
-      const stock = sumStock(variantStock);
-      return {
-        id: base?.id ?? `${slug(input.name)}-${uid()}`,
-        name: input.name,
-        category: input.category as Category,
-        price: input.price,
-        description: input.description,
-        images: input.images.length ? input.images : (base?.images ?? []),
-        variants: input.variants.map((v) => v.label),
-        inStock: stock > 0 && input.status === "Active",
-        popularity: base?.popularity ?? 50,
-        createdAt: base?.createdAt ?? new Date().toISOString().slice(0, 10),
-        ...(base?.tag ? { tag: base.tag } : {}),
-        stock,
-        compareAtPrice: input.compareAtPrice,
-        status: stock === 0 && input.status === "Active" ? "Out of Stock" : input.status,
-        updatedAt: new Date().toISOString(),
-        variantStock,
-      };
-    },
-    [],
-  );
+  const fromInput = useCallback((input: ProductInput, base?: AdminProduct): AdminProduct => {
+    const variantStock: Record<string, number> = {};
+    if (input.variants.length) {
+      for (const v of input.variants) variantStock[v.label] = Math.max(0, v.stock);
+    } else {
+      variantStock[NO_VARIANT_KEY] = Math.max(0, input.stock);
+    }
+    const stock = sumStock(variantStock);
+    return {
+      id: base?.id ?? `${slug(input.name)}-${uid()}`,
+      name: input.name,
+      category: input.category as Category,
+      price: input.price,
+      description: input.description,
+      images: input.images.length ? input.images : (base?.images ?? []),
+      variants: input.variants.map((v) => v.label),
+      inStock: stock > 0 && input.status === "Active",
+      popularity: base?.popularity ?? 50,
+      createdAt: base?.createdAt ?? new Date().toISOString().slice(0, 10),
+      ...(base?.tag ? { tag: base.tag } : {}),
+      stock,
+      compareAtPrice: input.compareAtPrice,
+      status: stock === 0 && input.status === "Active" ? "Out of Stock" : input.status,
+      updatedAt: new Date().toISOString(),
+      variantStock,
+    };
+  }, []);
 
   const createProduct = useCallback(
     (input: ProductInput) => {
       const product = fromInput(input);
+      // Optimistic insert, then reconcile with the database-generated row.
       patch((prev) => ({ ...prev, products: [product, ...prev.products] }));
+      void repo.insertProduct(product).then((saved) => {
+        if (saved) {
+          patch((prev) => ({
+            ...prev,
+            products: prev.products.map((p) => (p.id === product.id ? saved : p)),
+          }));
+        }
+      });
       return product;
     },
     [fromInput, patch],
@@ -401,10 +364,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateProduct = useCallback(
     (id: string, input: ProductInput) => {
+      let next: AdminProduct | undefined;
       patch((prev) => ({
         ...prev,
-        products: prev.products.map((p) => (p.id === id ? fromInput(input, p) : p)),
+        products: prev.products.map((p) => {
+          if (p.id !== id) return p;
+          next = fromInput(input, p);
+          return next;
+        }),
       }));
+      if (next) void repo.updateProductRow(id, next);
     },
     [fromInput, patch],
   );
@@ -431,39 +400,46 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteProducts = useCallback(
-    (ids: string[]) =>
-      patch((prev) => ({ ...prev, products: prev.products.filter((p) => !ids.includes(p.id)) })),
+    (ids: string[]) => {
+      patch((prev) => ({ ...prev, products: prev.products.filter((p) => !ids.includes(p.id)) }));
+      void repo.deleteProductRows(ids);
+    },
     [patch],
   );
 
   const bulkStatus = useCallback(
     (ids: string[], status: ProductStatus) =>
-      patch((prev) => ({
-        ...prev,
-        products: prev.products.map((p) =>
+      patch((prev) => {
+        const products = prev.products.map((p) =>
           ids.includes(p.id)
-            ? { ...p, status, inStock: status === "Active" && p.stock > 0, updatedAt: new Date().toISOString() }
+            ? {
+                ...p,
+                status,
+                inStock: status === "Active" && p.stock > 0,
+                updatedAt: new Date().toISOString(),
+              }
             : p,
-        ),
-      })),
+        );
+        for (const p of products) {
+          if (ids.includes(p.id)) void repo.updateProductRow(p.id, p);
+        }
+        return { ...prev, products };
+      }),
     [patch],
   );
 
-  const createCategory = useCallback(
-    (name: string) => {
-      const clean = name.trim();
-      let ok = false;
-      setState((prev) => {
-        if (!clean || prev.categories.some((c) => c.toLowerCase() === clean.toLowerCase())) {
-          return prev;
-        }
-        ok = true;
-        return { ...prev, categories: [...prev.categories, clean] };
-      });
-      return ok;
-    },
-    [],
-  );
+  const createCategory = useCallback((name: string) => {
+    const clean = name.trim();
+    let ok = false;
+    setState((prev) => {
+      if (!clean || prev.categories.some((c) => c.toLowerCase() === clean.toLowerCase())) {
+        return prev;
+      }
+      ok = true;
+      return { ...prev, categories: [...prev.categories, clean] };
+    });
+    return ok;
+  }, []);
 
   const renameCategory = useCallback((from: string, to: string) => {
     const clean = to.trim();
@@ -510,51 +486,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [patch],
   );
 
-
-  const createEvent = useCallback(
-    (input: EventInput) =>
-      patch((prev) => ({
-        ...prev,
-        events: [{ id: `${slug(input.name)}-${uid()}`, ...input }, ...prev.events],
-      })),
-    [patch],
-  );
-
-  const updateEvent = useCallback(
-    (id: string, input: EventInput) =>
-      patch((prev) => ({
-        ...prev,
-        events: prev.events.map((e) => (e.id === id ? { ...e, ...input } : e)),
-      })),
-    [patch],
-  );
-
-  const deleteEvent = useCallback(
-    (id: string) => patch((prev) => ({ ...prev, events: prev.events.filter((e) => e.id !== id) })),
-    [patch],
-  );
-
-  const toggleFeatured = useCallback(
-    (id: string) => {
-      let allowed = true;
-      setState((prev) => {
-        const target = prev.events.find((e) => e.id === id);
-        if (!target) return prev;
-        const count = prev.events.filter((e) => e.featured).length;
-        if (!target.featured && count >= 3) {
-          allowed = false;
-          return prev;
-        }
-        return {
-          ...prev,
-          events: prev.events.map((e) => (e.id === id ? { ...e, featured: !e.featured } : e)),
-        };
-      });
-      return allowed;
-    },
-    [],
-  );
-
   const setVariantStock = useCallback(
     (productId: string, variant: string, qty: number) =>
       patch((prev) => ({
@@ -563,7 +494,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           if (p.id !== productId) return p;
           const variantStock = { ...p.variantStock, [variant]: Math.max(0, qty) };
           const stock = sumStock(variantStock);
-          return {
+          const next: AdminProduct = {
             ...p,
             variantStock,
             stock,
@@ -571,6 +502,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             inStock: stock > 0 && p.status !== "Draft",
             updatedAt: new Date().toISOString(),
           };
+          void repo.updateProductRow(productId, next);
+          return next;
         }),
       })),
     [patch],
@@ -586,18 +519,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const stock = sumStock(variantStock);
         return {
           ...prev,
-          products: prev.products.map((p) =>
-            p.id === productId
-              ? {
-                  ...p,
-                  variantStock,
-                  stock,
-                  inStock: stock > 0 && p.status !== "Draft",
-                  status: stock === 0 && p.status === "Active" ? "Out of Stock" : p.status,
-                  updatedAt: new Date().toISOString(),
-                }
-              : p,
-          ),
+          products: prev.products.map((p) => {
+            if (p.id !== productId) return p;
+            const next: AdminProduct = {
+              ...p,
+              variantStock,
+              stock,
+              inStock: stock > 0 && p.status !== "Draft",
+              status: stock === 0 && p.status === "Active" ? "Out of Stock" : p.status,
+              updatedAt: new Date().toISOString(),
+            };
+            void repo.updateProductRow(productId, next);
+            return next;
+          }),
           adjustments: [
             {
               id: uid(),
@@ -627,6 +561,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
         history: [{ at: now, label: "Order placed from storefront" }],
       } as Order;
       patch((prev) => ({ ...prev, orders: [order, ...prev.orders] }));
+      // Persist so the order shows up in the dashboard on any device.
+      void repo.insertOrder(order).then((saved) => {
+        if (saved) {
+          patch((prev) => ({
+            ...prev,
+            orders: prev.orders.map((o) => (o.id === order.id ? saved : o)),
+          }));
+        }
+      });
       return order;
     },
     [patch],
@@ -653,8 +596,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const setOrderStatus = useCallback(
-    (id: string, status: OrderStatus, reason?: string) =>
-      patch((prev) => ({
+    (id: string, status: OrderStatus, reason?: string) => {
+      void repo.updateOrderRow(id, {
+        status,
+        ...(status === "Refunded" ? { payment: "Refunded" as const } : {}),
+        ...(reason ? { note: reason } : {}),
+      });
+      return patch((prev) => ({
         ...prev,
         orders: prev.orders.map((o) =>
           o.id === id
@@ -669,18 +617,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
               )
             : o,
         ),
-      })),
+      }));
+    },
     [patch],
   );
 
   const setTracking = useCallback(
-    (id: string, tracking: string) =>
-      patch((prev) => ({
+    (id: string, tracking: string) => {
+      void repo.updateOrderRow(id, { tracking });
+      return patch((prev) => ({
         ...prev,
         orders: prev.orders.map((o) =>
           o.id === id ? pushHistory({ ...o, tracking }, `Tracking added: ${tracking}`) : o,
         ),
-      })),
+      }));
+    },
     [patch],
   );
 
@@ -712,10 +663,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       duplicateProduct,
       deleteProducts,
       bulkStatus,
-      createEvent,
-      updateEvent,
-      deleteEvent,
-      toggleFeatured,
       setVariantStock,
       adjustStock,
       placeOrder,
@@ -738,10 +685,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     duplicateProduct,
     deleteProducts,
     bulkStatus,
-    createEvent,
-    updateEvent,
-    deleteEvent,
-    toggleFeatured,
     setVariantStock,
     adjustStock,
     placeOrder,

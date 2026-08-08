@@ -1,28 +1,42 @@
 import { Link } from "@tanstack/react-router";
-import { Instagram, Twitter, Youtube } from "lucide-react";
+import { Logo } from "./Logo";
+import { TikTokIcon, WhatsAppIcon } from "./icons";
+import { whatsappUrl } from "@/lib/whatsapp";
+
+const TIKTOK_URL = "https://www.tiktok.com/@kidamerch";
+
+const socialCls =
+  "grid h-12 w-12 place-items-center rounded-full border border-border transition-colors duration-200 hover:bg-secondary hover:text-primary";
 
 export function Footer() {
   return (
     <footer className="mt-24 border-t border-border">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        <div className="grid gap-10 py-16 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div className="grid gap-12 py-16 md:grid-cols-[1.6fr_1fr_1fr]">
           <div>
-            <p className="display-xl text-3xl">KidaMerch</p>
-            <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-              Independent anime merch, made in small runs. Four drops a year, no restocks on
-              numbered editions.
+            <Logo className="h-20 w-auto" />
+            <p className="mt-6 max-w-xs text-sm leading-relaxed text-muted-foreground">
+              KIDA lets anime fans carry the worlds they love into the real world.
             </p>
-            <div className="mt-6 flex gap-2">
-              {[Instagram, Twitter, Youtube].map((Icon, i) => (
-                <a
-                  key={i}
-                  href="#"
-                  aria-label="Social profile"
-                  className="grid h-11 w-11 place-items-center rounded-full border border-border transition-colors duration-200 hover:bg-secondary"
-                >
-                  <Icon size={16} />
-                </a>
-              ))}
+            <div className="mt-7 flex gap-2.5">
+              <a
+                href={TIKTOK_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="KIDA on TikTok"
+                className={socialCls}
+              >
+                <TikTokIcon size={17} />
+              </a>
+              <a
+                href={whatsappUrl("Hi KIDA! I have a question.")}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Message KIDA on WhatsApp"
+                className={socialCls}
+              >
+                <WhatsAppIcon size={17} />
+              </a>
             </div>
           </div>
 
@@ -35,25 +49,16 @@ export function Footer() {
             ]}
           />
           <FooterCol
-            title="Studio"
-            links={[
-              { label: "Events", to: "/events" },
-              { label: "About", to: "/" },
-              { label: "Stockists", to: "/" },
-            ]}
-          />
-          <FooterCol
             title="Legal"
             links={[
-              { label: "Terms", to: "/" },
-              { label: "Privacy", to: "/" },
-              { label: "Returns", to: "/" },
+              { label: "Returns", to: "/returns" },
+              { label: "Terms", to: "/terms" },
             ]}
           />
         </div>
 
         <div className="flex flex-col gap-2 border-t border-border py-8 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} KidaMerch. Prototype — no real orders.</p>
+          <p>© {new Date().getFullYear()} KIDA. All rights reserved.</p>
           <p>All artwork original. No franchise properties.</p>
         </div>
       </div>
@@ -61,13 +66,7 @@ export function Footer() {
   );
 }
 
-function FooterCol({
-  title,
-  links,
-}: {
-  title: string;
-  links: { label: string; to: string }[];
-}) {
+function FooterCol({ title, links }: { title: string; links: { label: string; to: string }[] }) {
   return (
     <div>
       <p className="eyebrow text-[10px] text-muted-foreground">{title}</p>

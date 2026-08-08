@@ -1,10 +1,11 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { Logo } from "./Logo";
 import { EASE } from "./Reveal";
 
 /**
  * Manga "impact frame" intro: speed lines converge, a brushstroke draws,
- * the wordmark snaps in, then the whole frame lifts away.
+ * the logo snaps in, then the whole frame lifts away.
  */
 export function IntroLoader({ onDone }: { onDone: () => void }) {
   const reduce = useReducedMotion();
@@ -82,8 +83,8 @@ export function IntroLoader({ onDone }: { onDone: () => void }) {
                 animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
                 transition={{ duration: 0.5, delay: reduce ? 0.1 : 0.75, ease: EASE }}
               >
-                <p className="display-xl text-[13vw] leading-none sm:text-6xl">KidaMerch</p>
-                <p className="eyebrow mt-4 text-muted-foreground">Anime Merch · Drop 04</p>
+                <Logo className="mx-auto h-24 w-auto sm:h-28" />
+                <p className="eyebrow mt-4 text-muted-foreground">Anime Merch</p>
               </motion.div>
 
               <motion.p

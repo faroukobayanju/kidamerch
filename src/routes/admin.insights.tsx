@@ -31,7 +31,7 @@ const tooltipStyle = {
 function InsightsPage() {
   const { orders } = useData();
   const [range, setRange] = useState<7 | 30>(30);
-  const series = useMemo(() => makeSalesSeries(range), [range]);
+  const series = useMemo(() => makeSalesSeries(range, orders), [range, orders]);
 
   const topProducts = useMemo(() => {
     const map = new Map<string, { name: string; units: number; revenue: number }>();
@@ -82,7 +82,13 @@ function InsightsPage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={series}>
               <CartesianGrid stroke="var(--color-border)" vertical={false} />
-              <XAxis dataKey="label" tick={axis} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <XAxis
+                dataKey="label"
+                tick={axis}
+                tickLine={false}
+                axisLine={false}
+                interval="preserveStartEnd"
+              />
               <YAxis tick={axis} tickLine={false} axisLine={false} width={52} />
               <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatPrice(v)} />
               <Line
@@ -107,7 +113,9 @@ function InsightsPage() {
               {topProducts.map((p) => (
                 <li key={p.name} className="flex items-center gap-3 px-4 py-3">
                   <span className="min-w-0 flex-1 truncate text-sm">{p.name}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">{p.units} units</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {p.units} units
+                  </span>
                   <span className="w-24 text-right text-sm font-semibold tabular-nums">
                     {formatPrice(p.revenue)}
                   </span>
@@ -132,7 +140,6 @@ function InsightsPage() {
           </div>
         </Panel>
       </div>
-
     </AdminShell>
   );
 }

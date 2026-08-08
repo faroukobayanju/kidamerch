@@ -88,11 +88,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "KidaMerch — Anime Merch Drops" },
+      { title: "KIDA — For those who never outgrew anime." },
       {
         name: "description",
         content:
-          "Independent anime merch in small runs: heavyweight apparel, hand-finished figures, accessories and numbered prints.",
+          "KIDA lets anime fans carry the worlds they love into the real world. Apparel, figures, accessories and prints, ordered on WhatsApp.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -103,9 +103,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Manrope:wght@400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@400..900&family=Inter:wght@300..700&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/kida-icon.png", type: "image/png" },
+      { rel: "apple-touch-icon", href: "/kida-icon.png" },
     ],
   }),
   shellComponent: RootShell,
@@ -159,7 +160,7 @@ function Shell() {
       {!introDone && <IntroLoader onDone={() => setIntroDone(true)} />}
       <Nav />
       <CartDrawer />
-      <main className="min-h-screen pt-20">
+      <main className="min-h-screen pt-24">
         <motion.div
           key={pathname}
           initial={{ opacity: 0, y: 12 }}
@@ -175,4 +176,3 @@ function Shell() {
     </>
   );
 }
-

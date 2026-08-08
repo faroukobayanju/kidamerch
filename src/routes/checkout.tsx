@@ -1,45 +1,88 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatPrice } from "@/data/products";
 import { useStore } from "@/lib/store";
+import { useData } from "@/lib/data-store";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { WhatsAppIcon } from "@/components/icons";
+import { buildOrderMessage, openWhatsApp, WHATSAPP_DISPLAY } from "@/lib/whatsapp";
 import { EASE } from "@/components/Reveal";
 
 export const Route = createFileRoute("/checkout")({
   head: () => ({
     meta: [
-      { title: "Checkout — KidaMerch" },
+      { title: "Checkout — KIDA" },
       {
         name: "description",
         content:
-          "Mock checkout flow: shipping details, card entry and confirmation. This is a prototype — no payment is processed.",
+          "Send your order to KIDA on WhatsApp. Add your delivery details, review the bag, and we'll confirm availability and payment.",
       },
-      { property: "og:title", content: "Checkout — KidaMerch" },
-      { property: "og:description", content: "Mock checkout — no payment is processed." },
+      { property: "og:title", content: "Checkout — KIDA" },
+      { property: "og:description", content: "Orders are confirmed on WhatsApp." },
     ],
   }),
   component: Checkout,
 });
 
-const STEPS = ["Shipping", "Payment", "Confirmation"] as const;
+const STEPS = ["Details", "Review", "Sent"] as const;
+
+type Details = { name: string; phone: string; address: string; note: string };
 
 function Checkout() {
-  const { lines, subtotal, shipping, tax, total, clearCart } = useStore();
+  const { lines, subtotal, total, clearCart } = useStore();
+  const { placeOrder } = useData();
   const [step, setStep] = useState(0);
-  const [processing, setProcessing] = useState(false);
-  const [orderNumber] = useState(
-    () => `KRG-${Math.floor(100000 + Math.random() * 899999)}`,
-  );
+  const [details, setDetails] = useState<Details>({
+    name: "",
+    phone: "",
+    address: "",
+    note: "",
+  });
+  const [reference] = useState(() => `KM-${Math.floor(100000 + Math.random() * 899999)}`);
   const [snapshot, setSnapshot] = useState<{ count: number; total: number } | null>(null);
 
   const empty = lines.length === 0 && step < 2;
 
+  const send = () => {
+    const message = buildOrderMessage({
+      lines,
+      totals: { subtotal, total },
+      contact: details,
+      reference,
+    });
+
+    placeOrder({
+      customerName: details.name,
+      customerEmail: details.phone,
+      address: details.address,
+      items: lines.map(({ line, product }) => ({
+        productId: product.id,
+        name: product.name,
+        image: product.images[0]!,
+        variant: line.variant,
+        qty: line.qty,
+        price: product.price,
+      })),
+      subtotal,
+      shipping: 0,
+      tax: 0,
+      total,
+      tracking: null,
+      reason: null,
+      id: reference,
+    });
+
+    setSnapshot({ count: lines.reduce((n, l) => n + l.line.qty, 0), total });
+    openWhatsApp(message);
+    setStep(2);
+    clearCart();
+  };
+
   return (
     <div className="mx-auto max-w-4xl px-5 pt-10 sm:px-8">
       <header className="pb-8">
-        <p className="eyebrow text-primary">Secure · Prototype</p>
+        <p className="eyebrow text-primary">Order on WhatsApp</p>
         <h1 className="display-xl mt-3 text-5xl sm:text-6xl">Checkout</h1>
       </header>
 
@@ -53,7 +96,7 @@ function Checkout() {
             to="/shop"
             className="eyebrow mt-8 inline-flex h-14 items-center rounded-sm bg-primary px-7 text-primary-foreground"
           >
-            Shop the drop
+            Shop the collection
           </Link>
         </div>
       ) : (
@@ -67,26 +110,24 @@ function Checkout() {
                 exit={{ opacity: 0, x: -24 }}
                 transition={{ duration: 0.4, ease: EASE }}
               >
-                {step === 0 && <ShippingStep onNext={() => setStep(1)} />}
-                {step === 1 && (
-                  <PaymentStep
-                    processing={processing}
-                    onBack={() => setStep(0)}
-                    onPay={() => {
-                      setProcessing(true);
-                      setSnapshot({
-                        count: lines.reduce((n, l) => n + l.line.qty, 0),
-                        total,
-                      });
-                      setTimeout(() => {
-                        setProcessing(false);
-                        setStep(2);
-                        clearCart();
-                      }, 1600);
+                {step === 0 && (
+                  <DetailsStep
+                    initial={details}
+                    onNext={(d) => {
+                      setDetails(d);
+                      setStep(1);
                     }}
                   />
                 )}
-                {step === 2 && <ConfirmationStep orderNumber={orderNumber} snapshot={snapshot} />}
+                {step === 1 && (
+                  <ReviewStep
+                    details={details}
+                    reference={reference}
+                    onBack={() => setStep(0)}
+                    onSend={send}
+                  />
+                )}
+                {step === 2 && <SentStep reference={reference} snapshot={snapshot} />}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -113,11 +154,6 @@ function Checkout() {
                     </li>
                   ))}
                 </ul>
-                <div className="mt-5 space-y-2 border-t border-border pt-5 text-sm">
-                  <SummaryRow label="Subtotal" value={subtotal} />
-                  <SummaryRow label="Shipping" value={shipping} free />
-                  <SummaryRow label="Tax" value={tax} />
-                </div>
                 <div className="mt-5 flex items-center justify-between border-t border-border pt-5">
                   <span className="eyebrow">Total</span>
                   <AnimatedNumber
@@ -126,28 +162,14 @@ function Checkout() {
                     className="text-lg font-semibold tabular-nums text-primary"
                   />
                 </div>
+                <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+                  Delivery is quoted separately on WhatsApp — the cost depends on your location.
+                </p>
               </div>
             </aside>
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  free,
-}: {
-  label: string;
-  value: number;
-  free?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="tabular-nums">{free && value === 0 ? "Free" : formatPrice(value)}</span>
     </div>
   );
 }
@@ -185,7 +207,7 @@ function StepIndicator({ step }: { step: number }) {
 const fieldClass =
   "h-14 w-full rounded-sm border border-input bg-background px-4 text-sm outline-none transition-colors duration-200 focus:border-primary";
 
-function ShippingStep({ onNext }: { onNext: () => void }) {
+function DetailsStep({ initial, onNext }: { initial: Details; onNext: (d: Details) => void }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -193,40 +215,64 @@ function ShippingStep({ onNext }: { onNext: () => void }) {
     const data = new FormData(e.currentTarget);
     const next: Record<string, string> = {};
     const name = String(data.get("name") ?? "").trim();
-    const email = String(data.get("email") ?? "").trim();
+    const phone = String(data.get("phone") ?? "").trim();
     const address = String(data.get("address") ?? "").trim();
-    if (name.length < 2) next['name'] = "Enter your full name.";
-    if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) next['email'] = "Enter a valid email.";
-    if (address.length < 6) next['address'] = "Enter a street address.";
+    const note = String(data.get("note") ?? "").trim();
+
+    if (name.length < 2) next["name"] = "Enter your full name.";
+    if (phone.replace(/\D/g, "").length < 7) next["phone"] = "Enter a reachable phone number.";
+    if (address.length < 6) next["address"] = "Enter a delivery address.";
+
     setErrors(next);
-    if (Object.keys(next).length === 0) onNext();
+    if (Object.keys(next).length === 0) onNext({ name, phone, address, note });
   };
 
   return (
     <form onSubmit={submit} className="space-y-5">
-      <h2 className="display-xl text-2xl">Shipping details</h2>
-      <Field label="Full name" error={errors['name']}>
-        <input name="name" className={fieldClass} placeholder="Rei Tanaka" />
+      <h2 className="display-xl text-2xl">Delivery details</h2>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        We confirm every order personally on WhatsApp. Delivery cost varies by location, so we share
+        it in the chat once we have your address.
+      </p>
+      <Field label="Full name" error={errors["name"]}>
+        <input
+          name="name"
+          defaultValue={initial.name}
+          className={fieldClass}
+          placeholder="Rei Tanaka"
+        />
       </Field>
-      <Field label="Email" error={errors['email']}>
-        <input name="email" type="email" className={fieldClass} placeholder="you@email.com" />
+      <Field label="Phone number" error={errors["phone"]}>
+        <input
+          name="phone"
+          type="tel"
+          defaultValue={initial.phone}
+          className={fieldClass}
+          placeholder="+234 800 000 0000"
+        />
       </Field>
-      <Field label="Street address" error={errors['address']}>
-        <input name="address" className={fieldClass} placeholder="12 Warehouse Lane" />
+      <Field label="Delivery address" error={errors["address"]}>
+        <input
+          name="address"
+          defaultValue={initial.address}
+          className={fieldClass}
+          placeholder="12 Warehouse Lane, Lagos"
+        />
       </Field>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field label="City">
-          <input name="city" className={fieldClass} placeholder="Berlin" />
-        </Field>
-        <Field label="Postal code">
-          <input name="zip" className={fieldClass} placeholder="10119" />
-        </Field>
-      </div>
+      <Field label="Note (optional)">
+        <textarea
+          name="note"
+          defaultValue={initial.note}
+          rows={3}
+          placeholder="Anything we should know?"
+          className="w-full rounded-sm border border-input bg-background p-4 text-sm outline-none transition-colors duration-200 focus:border-primary"
+        />
+      </Field>
       <button
         type="submit"
         className="eyebrow h-14 w-full rounded-sm bg-primary text-primary-foreground transition-opacity duration-200 hover:opacity-90 sm:w-auto sm:px-10"
       >
-        Continue to payment
+        Review order
       </button>
     </form>
   );
@@ -250,150 +296,74 @@ function Field({
   );
 }
 
-function PaymentStep({
-  processing,
-  onPay,
+function ReviewStep({
+  details,
+  reference,
+  onSend,
   onBack,
 }: {
-  processing: boolean;
-  onPay: () => void;
+  details: Details;
+  reference: string;
+  onSend: () => void;
   onBack: () => void;
 }) {
-  const [number, setNumber] = useState("");
-  const [name, setName] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [cvc, setCvc] = useState("");
-  const [flipped, setFlipped] = useState(false);
-  const reduce = useReducedMotion();
-
-  const masked = useMemo(() => (number || "").padEnd(19, "•"), [number]);
-
-  const formatNumber = (v: string) =>
-    v
-      .replace(/\D/g, "")
-      .slice(0, 16)
-      .replace(/(.{4})/g, "$1 ")
-      .trim();
-
-  const formatExpiry = (v: string) => {
-    const d = v.replace(/\D/g, "").slice(0, 4);
-    return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
-  };
-
-  const valid = number.replace(/\s/g, "").length === 16 && expiry.length === 5 && cvc.length >= 3;
-
   return (
     <div className="space-y-6">
-      <h2 className="display-xl text-2xl">Payment</h2>
+      <h2 className="display-xl text-2xl">Review &amp; send</h2>
 
-      <div className="[perspective:1200px]">
-        <motion.div
-          className="relative aspect-[16/10] w-full max-w-sm [transform-style:preserve-3d]"
-          animate={{ rotateY: flipped && !reduce ? 180 : 0 }}
-          transition={{ duration: 0.6, ease: EASE }}
-        >
-          <div className="absolute inset-0 flex flex-col justify-between rounded-lg border border-border bg-surface-2 p-6 [backface-visibility:hidden]">
-            <div className="flex items-center justify-between">
-              <span className="h-7 w-10 rounded-sm bg-primary/80" />
-              <span className="eyebrow text-[10px] text-muted-foreground">KidaMerch</span>
-            </div>
-            <p className="font-mono text-lg tracking-[0.14em]">{masked}</p>
-            <div className="flex items-end justify-between text-xs">
-              <span className="truncate uppercase tracking-widest">{name || "Card holder"}</span>
-              <span className="tabular-nums">{expiry || "MM/YY"}</span>
-            </div>
-          </div>
-          <div className="absolute inset-0 flex flex-col justify-center gap-4 rounded-lg border border-border bg-surface-2 p-6 [backface-visibility:hidden] [transform:rotateY(180deg)]">
-            <span className="-mx-6 h-10 bg-ink" />
-            <span className="ml-auto rounded-sm bg-background px-4 py-2 font-mono text-sm">
-              {cvc || "•••"}
-            </span>
-          </div>
-        </motion.div>
+      <div className="rounded-sm border border-border bg-surface p-6">
+        <p className="eyebrow text-[10px] text-muted-foreground">Sending to</p>
+        <p className="mt-2 flex items-center gap-2 text-lg font-semibold text-primary">
+          <WhatsAppIcon size={18} /> {WHATSAPP_DISPLAY}
+        </p>
+        <dl className="mt-6 space-y-3 border-t border-border pt-5 text-sm">
+          <Row label="Order ref" value={reference} />
+          <Row label="Name" value={details.name} />
+          <Row label="Phone" value={details.phone} />
+          <Row label="Address" value={details.address} />
+          {details.note && <Row label="Note" value={details.note} />}
+        </dl>
       </div>
 
-      <div className="space-y-5">
-        <Field label="Card number">
-          <input
-            inputMode="numeric"
-            value={number}
-            onFocus={() => setFlipped(false)}
-            onChange={(e) => setNumber(formatNumber(e.target.value))}
-            placeholder="4242 4242 4242 4242"
-            className={fieldClass}
-          />
-        </Field>
-        <Field label="Name on card">
-          <input
-            value={name}
-            onFocus={() => setFlipped(false)}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="R. TANAKA"
-            className={fieldClass}
-          />
-        </Field>
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Expiry">
-            <input
-              inputMode="numeric"
-              value={expiry}
-              onFocus={() => setFlipped(false)}
-              onChange={(e) => setExpiry(formatExpiry(e.target.value))}
-              placeholder="09/29"
-              className={fieldClass}
-            />
-          </Field>
-          <Field label="CVC">
-            <input
-              inputMode="numeric"
-              value={cvc}
-              onFocus={() => setFlipped(true)}
-              onBlur={() => setFlipped(false)}
-              onChange={(e) => setCvc(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              placeholder="123"
-              className={fieldClass}
-            />
-          </Field>
-        </div>
-      </div>
-
-      <p className="text-xs text-muted-foreground">
-        No payment processor is connected. Submitting simulates a charge.
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        Tapping the button opens WhatsApp with your order pre-filled. Nothing is charged here —
+        payment is arranged in the chat.
       </p>
 
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
           onClick={onBack}
-          disabled={processing}
           className="eyebrow h-14 rounded-sm border border-border px-7 transition-colors duration-200 hover:bg-secondary"
         >
           Back
         </button>
         <button
           type="button"
-          onClick={onPay}
-          disabled={!valid || processing}
-          className="eyebrow inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-7 text-primary-foreground transition-opacity duration-200 hover:opacity-90 disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground sm:flex-none"
+          onClick={onSend}
+          className="eyebrow inline-flex h-14 flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-7 text-primary-foreground transition-opacity duration-200 hover:opacity-90 sm:flex-none"
         >
-          {processing ? (
-            <>
-              <Loader2 size={16} className="animate-spin" /> Processing
-            </>
-          ) : (
-            "Pay now"
-          )}
+          <WhatsAppIcon size={16} /> Send order on WhatsApp
         </button>
       </div>
     </div>
   );
 }
 
-function ConfirmationStep({
-  orderNumber,
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-right font-medium">{value}</dd>
+    </div>
+  );
+}
+
+function SentStep({
+  reference,
   snapshot,
 }: {
-  orderNumber: string;
+  reference: string;
   snapshot: { count: number; total: number } | null;
 }) {
   const reduce = useReducedMotion();
@@ -437,23 +407,23 @@ function ConfirmationStep({
           ))}
       </div>
 
-      <h2 className="display-xl mt-8 text-4xl">Order placed</h2>
+      <h2 className="display-xl mt-8 text-4xl">Order sent</h2>
       <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-        Thanks — your pieces are reserved. A mock confirmation would land in your inbox within a
-        few minutes.
+        WhatsApp should have opened with your order ready to send. If it didn't, message us on{" "}
+        <span className="font-semibold text-primary">{WHATSAPP_DISPLAY}</span> with your order ref.
       </p>
 
       <dl className="mt-10 grid max-w-md gap-6 rule-line pt-6 text-left sm:grid-cols-3">
         <div>
-          <dt className="eyebrow text-[10px] text-muted-foreground">Order</dt>
-          <dd className="mt-1 font-semibold tabular-nums">{orderNumber}</dd>
+          <dt className="eyebrow text-[10px] text-muted-foreground">Order ref</dt>
+          <dd className="mt-1 font-semibold tabular-nums">{reference}</dd>
         </div>
         <div>
           <dt className="eyebrow text-[10px] text-muted-foreground">Items</dt>
           <dd className="mt-1 font-semibold tabular-nums">{snapshot?.count ?? 0}</dd>
         </div>
         <div>
-          <dt className="eyebrow text-[10px] text-muted-foreground">Paid</dt>
+          <dt className="eyebrow text-[10px] text-muted-foreground">Total</dt>
           <dd className="mt-1 font-semibold tabular-nums text-primary">
             {formatPrice(snapshot?.total ?? 0)}
           </dd>
@@ -468,10 +438,10 @@ function ConfirmationStep({
           Keep shopping
         </Link>
         <Link
-          to="/events"
+          to="/"
           className="eyebrow inline-flex h-14 items-center rounded-sm border border-border px-7"
         >
-          See events
+          Back home
         </Link>
       </div>
     </div>

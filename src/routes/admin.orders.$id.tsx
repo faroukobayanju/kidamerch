@@ -102,16 +102,10 @@ function OrderDetail() {
               ))}
             </ul>
             <div className="space-y-1.5 border-t border-border px-4 py-4 text-sm">
-              {[
-                ["Subtotal", order.subtotal],
-                ["Shipping", order.shipping],
-                ["Tax", order.tax],
-              ].map(([label, value]) => (
-                <div key={String(label)} className="flex justify-between text-muted-foreground">
-                  <span>{label}</span>
-                  <span className="tabular-nums">{formatPrice(Number(value))}</span>
-                </div>
-              ))}
+              <div className="flex justify-between text-muted-foreground">
+                <span>Delivery</span>
+                <span>Quoted on WhatsApp</span>
+              </div>
               <div className="flex justify-between border-t border-border pt-2 font-semibold">
                 <span>Total</span>
                 <span className="tabular-nums">{formatPrice(order.total)}</span>
@@ -151,7 +145,7 @@ function OrderDetail() {
                 <p className="text-xs text-muted-foreground">{order.customerEmail}</p>
               </div>
               <div>
-                <p className="eyebrow text-[10px] text-muted-foreground">Shipping address</p>
+                <p className="eyebrow text-[10px] text-muted-foreground">Delivery address</p>
                 <p className="mt-1 text-sm">{order.address}</p>
               </div>
               <Link

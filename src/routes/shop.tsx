@@ -1,28 +1,42 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { SlidersHorizontal, X } from "lucide-react";
-import { useMemo, useState } from "react";
-import { categories, products, type Category } from "@/data/products";
+import { useEffect, useMemo, useState } from "react";
+import {
+  categories,
+  formatPrice,
+  PRICE_FALLBACK_MAX,
+  PRICE_FALLBACK_MIN,
+  type Category,
+} from "@/data/products";
+import { useData } from "@/lib/data-store";
 import { ProductCard } from "@/components/ProductCard";
 import { EASE } from "@/components/Reveal";
 
 type Sort = "newest" | "price-asc" | "price-desc" | "popular";
 
+/**
+ * Price slider bounds, derived from the catalogue so the range always covers
+ * every product. Rounded to the nearest ₦5,000 to match the slider step.
+ * Falls back to a fixed range while the catalogue is empty, since Math.min of
+ * an empty list returns Infinity and would hide everything.
+ */
+const round5k = (n: number, dir: "up" | "down") =>
+  (dir === "up" ? Math.ceil(n / 5000) : Math.floor(n / 5000)) * 5000;
+
 export const Route = createFileRoute("/shop")({
   validateSearch: (search: Record<string, unknown>): { category?: string } =>
-    typeof search['category'] === "string"
-      ? { category: search['category'] as string }
-      : {},
+    typeof search["category"] === "string" ? { category: search["category"] as string } : {},
 
   head: () => ({
     meta: [
-      { title: "Shop All — KidaMerch" },
+      { title: "Shop All — KIDA" },
       {
         name: "description",
         content:
-          "Browse every piece in the KidaMerch catalogue: apparel, figures, accessories and numbered prints. Filter by category, price and availability.",
+          "Browse every piece in the KIDA catalogue: apparel, figures, accessories and numbered prints. Filter by category, price and availability.",
       },
-      { property: "og:title", content: "Shop All — KidaMerch" },
+      { property: "og:title", content: "Shop All — KIDA" },
       {
         property: "og:description",
         content: "Every piece in the catalogue: apparel, figures, accessories and prints.",
@@ -34,13 +48,24 @@ export const Route = createFileRoute("/shop")({
 
 function Shop() {
   const search = Route.useSearch();
+  const { storefrontProducts: products } = useData();
   const initial = categories.find((c) => c.name === search.category)?.name;
 
+  // Bounds follow the live catalogue, so the slider always covers every product.
+  const [PRICE_MIN, PRICE_MAX] = useMemo(() => {
+    if (!products.length) return [PRICE_FALLBACK_MIN, PRICE_FALLBACK_MAX];
+    const prices = products.map((p) => p.price);
+    return [round5k(Math.min(...prices), "down"), round5k(Math.max(...prices), "up")];
+  }, [products]);
+
   const [selected, setSelected] = useState<Category[]>(initial ? [initial] : []);
-  const [maxPrice, setMaxPrice] = useState(350);
+  const [maxPrice, setMaxPrice] = useState(PRICE_MAX);
   const [inStockOnly, setInStockOnly] = useState(false);
   const [sort, setSort] = useState<Sort>("newest");
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Widen the slider once products arrive, otherwise everything filters out.
+  useEffect(() => setMaxPrice(PRICE_MAX), [PRICE_MAX]);
 
   const filtered = useMemo(() => {
     const list = products.filter(
@@ -53,14 +78,13 @@ function Shop() {
     if (sort === "price-asc") sorted.sort((a, b) => a.price - b.price);
     if (sort === "price-desc") sorted.sort((a, b) => b.price - a.price);
     if (sort === "popular") sorted.sort((a, b) => b.popularity - a.popularity);
-    if (sort === "newest")
-      sorted.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+    if (sort === "newest") sorted.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
     return sorted;
-  }, [selected, maxPrice, inStockOnly, sort]);
+  }, [products, selected, maxPrice, inStockOnly, sort]);
 
   const reset = () => {
     setSelected([]);
-    setMaxPrice(350);
+    setMaxPrice(PRICE_MAX);
     setInStockOnly(false);
   };
 
@@ -73,6 +97,9 @@ function Shop() {
       inStockOnly={inStockOnly}
       setInStockOnly={setInStockOnly}
       reset={reset}
+      countFor={(c) => products.filter((p) => p.category === c).length}
+      priceMin={PRICE_MIN}
+      priceMax={PRICE_MAX}
     />
   );
 
@@ -196,6 +223,9 @@ function Filters({
   inStockOnly,
   setInStockOnly,
   reset,
+  countFor,
+  priceMin,
+  priceMax,
 }: {
   selected: Category[];
   setSelected: (next: Category[]) => void;
@@ -204,6 +234,9 @@ function Filters({
   inStockOnly: boolean;
   setInStockOnly: (b: boolean) => void;
   reset: () => void;
+  countFor: (category: Category) => number;
+  priceMin: number;
+  priceMax: number;
 }) {
   const toggle = (c: Category) =>
     setSelected(selected.includes(c) ? selected.filter((x) => x !== c) : [...selected, c]);
@@ -228,9 +261,7 @@ function Filters({
                 }`}
               >
                 {c.name}
-                <span className="text-xs opacity-70 tabular-nums">
-                  {products.filter((p) => p.category === c.name).length}
-                </span>
+                <span className="text-xs opacity-70 tabular-nums">{countFor(c.name)}</span>
               </button>
             );
           })}
@@ -240,13 +271,13 @@ function Filters({
       <div>
         <div className="flex items-center justify-between">
           <p className="eyebrow text-[10px] text-muted-foreground">Max price</p>
-          <p className="text-sm font-semibold tabular-nums text-primary">${maxPrice}</p>
+          <p className="text-sm font-semibold tabular-nums text-primary">{formatPrice(maxPrice)}</p>
         </div>
         <input
           type="range"
-          min={24}
-          max={350}
-          step={2}
+          min={priceMin}
+          max={priceMax}
+          step={5000}
           value={maxPrice}
           onChange={(e) => setMaxPrice(Number(e.target.value))}
           aria-label="Maximum price"
@@ -302,10 +333,10 @@ function EmptyResults({ onReset }: { onReset: () => void }) {
           Reset filters
         </button>
         <Link
-          to="/events"
+          to="/"
           className="eyebrow inline-flex h-12 items-center rounded-sm border border-border px-6"
         >
-          See events
+          Back home
         </Link>
       </div>
     </div>

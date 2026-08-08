@@ -25,6 +25,8 @@ import {
   type ProductInput,
   type ProductStatus,
 } from "@/lib/data-store";
+import { uploadProductImage } from "@/lib/repo";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 export const Route = createFileRoute("/admin/products")({
   component: ProductsPage,
@@ -93,6 +95,47 @@ function ProductsPage() {
   const [form, setForm] = useState<FormState>(emptyForm(categories[0] ?? "Apparel"));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<string[] | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  /**
+   * Uploads picked photos to Supabase Storage and appends their public URLs.
+   * Without Supabase there is nowhere to host them, so we say so rather than
+   * silently doing nothing.
+   */
+  const handleFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    if (!isSupabaseConfigured) {
+      toast.error("Image upload needs Supabase", {
+        description: "Add your credentials to .env, or paste an image URL instead.",
+      });
+      return;
+    }
+
+    setUploading(true);
+    const uploaded: string[] = [];
+    let failed = 0;
+
+    for (const file of Array.from(files)) {
+      const url = await uploadProductImage(file);
+      if (url) uploaded.push(url);
+      else failed++;
+    }
+
+    if (uploaded.length) {
+      // Drop any blank URL rows so uploads don't leave empty inputs behind.
+      setForm((prev) => ({
+        ...prev,
+        images: [...prev.images.filter((u) => u.trim()), ...uploaded],
+      }));
+      toast.success(`${uploaded.length} image${uploaded.length === 1 ? "" : "s"} uploaded`);
+    }
+    if (failed) {
+      toast.error(`${failed} image${failed === 1 ? "" : "s"} failed to upload`, {
+        description: "Check you are signed in as an admin, then try again.",
+      });
+    }
+    setUploading(false);
+  };
 
   const filtered = useMemo(() => {
     const list = products.filter(
@@ -131,14 +174,15 @@ function ProductsPage() {
 
   const submit = () => {
     const next: Record<string, string> = {};
-    if (!form.name.trim()) next['name'] = "Name is required.";
+    if (!form.name.trim()) next["name"] = "Name is required.";
     const price = Number(form.price);
-    if (!form.price || Number.isNaN(price) || price <= 0) next['price'] = "Enter a price above 0.";
+    if (!form.price || Number.isNaN(price) || price <= 0) next["price"] = "Enter a price above 0.";
     if (form.compareAtPrice && Number(form.compareAtPrice) <= price)
-      next['compareAtPrice'] = "Compare-at must exceed the price.";
+      next["compareAtPrice"] = "Compare-at must exceed the price.";
     if (!form.description.trim() || form.description.trim().length < 10)
-      next['description'] = "Add at least 10 characters.";
-    if (form.variants.length === 0 && Number(form.stock) < 0) next['stock'] = "Stock cannot be negative.";
+      next["description"] = "Add at least 10 characters.";
+    if (form.variants.length === 0 && Number(form.stock) < 0)
+      next["stock"] = "Stock cannot be negative.";
     setErrors(next);
     if (Object.keys(next).length) return;
 
@@ -300,7 +344,9 @@ function ProductsPage() {
                     />
                   </th>
                   <th className="px-2 py-3 text-xs font-semibold text-muted-foreground">Product</th>
-                  <th className="px-2 py-3 text-xs font-semibold text-muted-foreground">Category</th>
+                  <th className="px-2 py-3 text-xs font-semibold text-muted-foreground">
+                    Category
+                  </th>
                   <th className="px-2 py-3 text-xs font-semibold text-muted-foreground">Price</th>
                   <th className="px-2 py-3 text-xs font-semibold text-muted-foreground">Stock</th>
                   <th className="px-2 py-3 text-xs font-semibold text-muted-foreground">Status</th>
@@ -309,7 +355,10 @@ function ProductsPage() {
               </thead>
               <tbody>
                 {rows.map((p) => (
-                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-secondary/40">
+                  <tr
+                    key={p.id}
+                    className="border-b border-border last:border-0 hover:bg-secondary/40"
+                  >
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"
@@ -339,7 +388,9 @@ function ProductsPage() {
                     <td className="px-2 py-3 text-muted-foreground">{p.category}</td>
                     <td className="px-2 py-3 tabular-nums">{formatPrice(p.price)}</td>
                     <td className="px-2 py-3 tabular-nums">
-                      <span className={p.stock <= lowStockThreshold ? "font-semibold text-primary" : ""}>
+                      <span
+                        className={p.stock <= lowStockThreshold ? "font-semibold text-primary" : ""}
+                      >
                         {p.stock}
                       </span>
                     </td>
@@ -387,7 +438,8 @@ function ProductsPage() {
         {rows.length > 0 && (
           <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
             <p className="text-xs text-muted-foreground">
-              {filtered.length} product{filtered.length === 1 ? "" : "s"} · page {current} of {pages}
+              {filtered.length} product{filtered.length === 1 ? "" : "s"} · page {current} of{" "}
+              {pages}
             </p>
             <div className="flex gap-2">
               <button
@@ -427,7 +479,7 @@ function ProductsPage() {
         }
       >
         <div className="space-y-4">
-          <Field label="Name" error={errors['name']}>
+          <Field label="Name" error={errors["name"]}>
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -463,27 +515,27 @@ function ProductsPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Price (USD)" error={errors['price']}>
+            <Field label="Price (₦)" error={errors["price"]}>
               <input
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
                 inputMode="decimal"
                 className={inputCls}
-                placeholder="128"
+                placeholder="15000"
               />
             </Field>
-            <Field label="Compare-at price" error={errors['compareAtPrice']} hint="Optional">
+            <Field label="Compare-at price (₦)" error={errors["compareAtPrice"]} hint="Optional">
               <input
                 value={form.compareAtPrice}
                 onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })}
                 inputMode="decimal"
                 className={inputCls}
-                placeholder="160"
+                placeholder="20000"
               />
             </Field>
           </div>
 
-          <Field label="Description" error={errors['description']}>
+          <Field label="Description" error={errors["description"]}>
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -494,7 +546,7 @@ function ProductsPage() {
           </Field>
 
           {form.variants.length === 0 && (
-            <Field label="Stock" error={errors['stock']}>
+            <Field label="Stock" error={errors["stock"]}>
               <input
                 value={form.stock}
                 onChange={(e) => setForm({ ...form, stock: e.target.value })}
@@ -507,16 +559,33 @@ function ProductsPage() {
           <div>
             <div className="flex items-center justify-between">
               <span className="eyebrow text-[10px] text-muted-foreground">Images</span>
-              <button
-                type="button"
-                className={btnSubtle}
-                onClick={() => setForm({ ...form, images: [...form.images, ""] })}
-              >
-                Add image
-              </button>
+              <div className="flex items-center gap-2">
+                <label
+                  className={`${btnSubtle} cursor-pointer ${uploading ? "opacity-60" : ""}`}
+                  aria-busy={uploading}
+                >
+                  {uploading ? "Uploading…" : "Upload photos"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="sr-only"
+                    disabled={uploading}
+                    onChange={(e) => void handleFiles(e.target.files)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={btnSubtle}
+                  onClick={() => setForm({ ...form, images: [...form.images, ""] })}
+                >
+                  Add URL
+                </button>
+              </div>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Paste one image URL per row — the first one is the main product image.
+              Upload photos straight from your device, or paste a URL. The first image is the main
+              product image.
             </p>
             <div className="mt-2 space-y-2">
               {form.images.map((url, i) => (
@@ -553,7 +622,6 @@ function ProductsPage() {
               ))}
             </div>
           </div>
-
 
           <div>
             <div className="flex items-center justify-between">
@@ -630,14 +698,18 @@ function ProductsPage() {
 
       <ConfirmDialog
         open={confirm !== null}
-        title={confirm && confirm.length > 1 ? `Delete ${confirm.length} products?` : "Delete product?"}
-        body="This removes the item from the admin catalogue and the storefront. Mock data only — you can reset by clearing site data."
+        title={
+          confirm && confirm.length > 1 ? `Delete ${confirm.length} products?` : "Delete product?"
+        }
+        body="This permanently removes the item from your catalogue and the storefront. This cannot be undone."
         onCancel={() => setConfirm(null)}
         onConfirm={() => {
           if (confirm) {
             deleteProducts(confirm);
             setSelected([]);
-            toast.success(confirm.length > 1 ? `${confirm.length} products deleted` : "Product deleted");
+            toast.success(
+              confirm.length > 1 ? `${confirm.length} products deleted` : "Product deleted",
+            );
           }
           setConfirm(null);
         }}

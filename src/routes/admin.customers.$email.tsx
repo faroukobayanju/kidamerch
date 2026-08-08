@@ -1,13 +1,7 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { AdminShell } from "@/components/admin/AdminShell";
-import {
-  EmptyState,
-  Panel,
-  PanelHead,
-  StatusBadge,
-  btnPrimary,
-} from "@/components/admin/parts";
+import { EmptyState, Panel, PanelHead, StatusBadge, btnPrimary } from "@/components/admin/parts";
 import { formatPrice } from "@/data/products";
 import { useCustomers } from "@/lib/data-store";
 
@@ -55,7 +49,10 @@ function CustomerDetail() {
           ["Orders", String(customer.orders.length)],
           ["Avg. order value", formatPrice(aov)],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-md border border-border bg-surface p-5 shadow-elevate">
+          <div
+            key={label}
+            className="rounded-md border border-border bg-surface p-5 shadow-elevate"
+          >
             <p className="eyebrow text-[10px] text-muted-foreground">{label}</p>
             <p className="mt-3 text-xl font-semibold tracking-tight tabular-nums">{value}</p>
           </div>

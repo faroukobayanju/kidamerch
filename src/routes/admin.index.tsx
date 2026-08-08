@@ -59,15 +59,14 @@ function Kpi({
 }
 
 function Dashboard() {
-  const { orders, products, events, categories, lowStockThreshold } = useData();
+  const { orders, products, categories, lowStockThreshold } = useData();
   const [range, setRange] = useState<7 | 30>(7);
-  const series = useMemo(() => makeSalesSeries(range), [range]);
+  const series = useMemo(() => makeSalesSeries(range, orders), [range, orders]);
 
   const paid = orders.filter((o) => o.status !== "Cancelled" && o.status !== "Refunded");
   const revenue = paid.reduce((s, o) => s + o.total, 0);
   const aov = paid.length ? revenue / paid.length : 0;
   const lowStock = products.filter((p) => p.stock <= lowStockThreshold);
-  const upcoming = events.filter((e) => e.status === "Upcoming").length;
 
   const byCategory = useMemo(() => {
     const map = new Map<string, number>();
@@ -120,7 +119,7 @@ function Dashboard() {
         <Kpi
           label="Active products"
           value={String(products.filter((p) => p.status === "Active").length)}
-          delta={`${upcoming} upcoming events`}
+          delta={`${categories.length} categories`}
           index={3}
         />
       </div>
@@ -255,7 +254,6 @@ function Dashboard() {
                   </span>
                 </Link>
               ))}
-
             </div>
           )}
         </Panel>
@@ -270,7 +268,10 @@ function Dashboard() {
             }
           />
           {lowStock.length === 0 ? (
-            <EmptyState title="Stock is healthy" body={`Nothing is at or below ${lowStockThreshold} units.`} />
+            <EmptyState
+              title="Stock is healthy"
+              body={`Nothing is at or below ${lowStockThreshold} units.`}
+            />
           ) : (
             <ul className="divide-y divide-border">
               {lowStock.slice(0, 6).map((p) => (

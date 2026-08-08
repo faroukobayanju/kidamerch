@@ -3,13 +3,14 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Heart, Menu, Search, ShoppingBag, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ThemeToggle } from "./theme";
+import { Logo } from "./Logo";
 import { useStore } from "@/lib/store";
-import { formatPrice, products } from "@/data/products";
+import { formatPrice } from "@/data/products";
+import { useData } from "@/lib/data-store";
 import { EASE } from "./Reveal";
 
 const LINKS = [
   { label: "Shop", to: "/shop" },
-  { label: "Events", to: "/events" },
   { label: "Wishlist", to: "/wishlist" },
 ] as const;
 
@@ -43,18 +44,13 @@ export function Nav() {
       >
         <div
           className={`mx-auto flex max-w-7xl items-center gap-4 px-5 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] sm:px-8 ${
-            scrolled ? "h-14" : "h-20"
+            scrolled ? "h-16" : "h-24"
           }`}
         >
-          <Link to="/" className="mr-auto flex min-w-0 items-center gap-2">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
-            <span
-              className={`display-xl truncate transition-all duration-300 ${
-                scrolled ? "text-lg" : "text-xl"
-              }`}
-            >
-              KidaMerch
-            </span>
+          <Link to="/" aria-label="KIDA — home" className="mr-auto flex min-w-0 items-center">
+            <Logo
+              className={`w-auto transition-all duration-300 ${scrolled ? "h-12" : "h-[68px]"}`}
+            />
           </Link>
 
           <nav className="hidden items-center gap-8 lg:flex">
@@ -141,8 +137,8 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25, ease: EASE }}
         >
-          <div className="flex h-20 items-center justify-between px-5">
-            <span className="display-xl text-xl">Menu</span>
+          <div className="flex h-24 items-center justify-between px-5">
+            <Logo className="h-16 w-auto" />
             <button
               type="button"
               aria-label="Close menu"
@@ -156,7 +152,10 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
             className="flex flex-col px-5 pt-6"
             initial="hidden"
             animate="show"
-            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } } }}
+            variants={{
+              hidden: {},
+              show: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+            }}
           >
             {[{ label: "Home", to: "/" }, ...LINKS, { label: "Cart", to: "/cart" }].map((l) => (
               <motion.div
@@ -185,11 +184,12 @@ function MobileMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
 function SearchOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [q, setQ] = useState("");
   const navigate = useNavigate();
+  const { storefrontProducts } = useData();
 
   const results = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return [];
-    return products
+    return storefrontProducts
       .filter(
         (p) =>
           p.name.toLowerCase().includes(term) ||
@@ -197,7 +197,7 @@ function SearchOverlay({ open, onClose }: { open: boolean; onClose: () => void }
           p.description.toLowerCase().includes(term),
       )
       .slice(0, 6);
-  }, [q]);
+  }, [q, storefrontProducts]);
 
   useEffect(() => {
     if (!open) setQ("");

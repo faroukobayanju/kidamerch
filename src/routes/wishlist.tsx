@@ -1,21 +1,25 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart } from "lucide-react";
-import { formatPrice, getProduct } from "@/data/products";
+import { formatPrice } from "@/data/products";
+import { useData } from "@/lib/data-store";
 import { useStore } from "@/lib/store";
 import { EASE } from "@/components/Reveal";
 
 export const Route = createFileRoute("/wishlist")({
   head: () => ({
     meta: [
-      { title: "Wishlist — KidaMerch" },
+      { title: "Wishlist — KIDA" },
       {
         name: "description",
         content:
-          "Your saved KidaMerch pieces. Move items straight to the bag or keep them held for the next drop.",
+          "Your saved KIDA pieces. Move items straight to the bag or keep them held for the next drop.",
       },
-      { property: "og:title", content: "Wishlist — KidaMerch" },
-      { property: "og:description", content: "Your saved KidaMerch pieces, ready to move to the bag." },
+      { property: "og:title", content: "Wishlist — KIDA" },
+      {
+        property: "og:description",
+        content: "Your saved KIDA pieces, ready to move to the bag.",
+      },
     ],
   }),
   component: WishlistPage,
@@ -23,7 +27,9 @@ export const Route = createFileRoute("/wishlist")({
 
 function WishlistPage() {
   const { wishlist, toggleWishlist, addToCart } = useStore();
-  const items = wishlist.map(getProduct).filter(Boolean);
+  const { getProductById } = useData();
+  // Resolved against the live catalogue so saved items survive a reload.
+  const items = wishlist.map((id) => getProductById(id)).filter(Boolean);
 
   return (
     <div className="mx-auto max-w-7xl px-5 pt-10 sm:px-8">

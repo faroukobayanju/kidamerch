@@ -5,17 +5,17 @@ import { useData } from "@/lib/data-store";
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Admin Console — KidaMerch" },
+      { title: "Admin Console — KIDA" },
       {
         name: "description",
         content:
-          "Operational console for the KidaMerch catalogue: products, orders, inventory, customers and events.",
+          "Operational console for the KIDA catalogue: products, orders, inventory and customers.",
       },
       { name: "robots", content: "noindex" },
-      { property: "og:title", content: "Admin Console — KidaMerch" },
+      { property: "og:title", content: "Admin Console — KIDA" },
       {
         property: "og:description",
-        content: "Manage catalogue, orders, inventory and events.",
+        content: "Manage catalogue, orders, inventory and customers.",
       },
     ],
   }),

@@ -20,8 +20,14 @@ export const Route = createFileRoute("/admin/inventory")({
 const REASONS: StockAdjustment["reason"][] = ["Restock", "Damaged", "Correction"];
 
 function InventoryPage() {
-  const { products, adjustments, adjustStock, setVariantStock, lowStockThreshold, setLowStockThreshold } =
-    useData();
+  const {
+    products,
+    adjustments,
+    adjustStock,
+    setVariantStock,
+    lowStockThreshold,
+    setLowStockThreshold,
+  } = useData();
   const [thresholdDraft, setThresholdDraft] = useState(String(lowStockThreshold));
   const [query, setQuery] = useState("");
   const [lowOnly, setLowOnly] = useState(false);
@@ -125,7 +131,6 @@ function InventoryPage() {
                         </div>
                       </div>
                       <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
-
                         {p.stock === 0 ? (
                           <StatusBadge status="Out of Stock" />
                         ) : p.stock <= lowStockThreshold ? (
@@ -187,7 +192,6 @@ function InventoryPage() {
                       })}
                     </div>
                   </li>
-
                 );
               })}
             </ul>

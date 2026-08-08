@@ -5,18 +5,20 @@ import { formatPrice } from "@/data/products";
 import { useStore } from "@/lib/store";
 import { QtyStepper } from "@/components/QtyStepper";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
+import { WhatsAppIcon } from "@/components/icons";
+import { buildOrderMessage, openWhatsApp } from "@/lib/whatsapp";
 import { EASE } from "@/components/Reveal";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({
     meta: [
-      { title: "Your Bag — KidaMerch" },
+      { title: "Your Bag — KIDA" },
       {
         name: "description",
         content:
-          "Review your KidaMerch bag: line items, variants, quantities, and an estimated shipping and tax breakdown before checkout.",
+          "Review your KIDA bag: line items, variants and quantities, then send the order straight to WhatsApp.",
       },
-      { property: "og:title", content: "Your Bag — KidaMerch" },
+      { property: "og:title", content: "Your Bag — KIDA" },
       { property: "og:description", content: "Review your bag before checkout." },
     ],
   }),
@@ -24,12 +26,15 @@ export const Route = createFileRoute("/cart")({
 });
 
 function CartPage() {
-  const { lines, setQty, removeLine, subtotal, shipping, tax, total, cartCount } = useStore();
+  const { lines, setQty, removeLine, subtotal, total, cartCount } = useStore();
+
+  const orderOnWhatsApp = () =>
+    openWhatsApp(buildOrderMessage({ lines, totals: { subtotal, total } }));
 
   return (
     <div className="mx-auto max-w-7xl px-5 pt-10 sm:px-8">
       <header className="pb-10">
-        <p className="eyebrow text-primary">Checkout</p>
+        <p className="eyebrow text-primary">Order on WhatsApp</p>
         <h1 className="display-xl mt-3 text-5xl sm:text-6xl">Your bag</h1>
         <p className="mt-4 text-sm text-muted-foreground tabular-nums">
           {cartCount} {cartCount === 1 ? "item" : "items"}
@@ -43,13 +48,13 @@ function CartPage() {
           </span>
           <h2 className="display-xl mt-6 text-2xl">Your bag is empty</h2>
           <p className="mt-3 max-w-xs text-sm text-muted-foreground">
-            Drop 04 is live and moving fast. Start with the new arrivals.
+            Start with the new arrivals — we confirm every order on WhatsApp.
           </p>
           <Link
             to="/shop"
             className="eyebrow mt-8 inline-flex h-14 items-center rounded-sm bg-primary px-7 text-primary-foreground"
           >
-            Shop the drop
+            Shop the collection
           </Link>
         </div>
       ) : (
@@ -118,11 +123,6 @@ function CartPage() {
           <aside className="lg:sticky lg:top-24 lg:self-start">
             <div className="rounded-sm border border-border bg-surface p-6">
               <p className="eyebrow text-[10px] text-muted-foreground">Order summary</p>
-              <div className="mt-5 space-y-2 text-sm">
-                <Row label="Subtotal" value={subtotal} />
-                <Row label="Shipping (est.)" value={shipping} free />
-                <Row label="Tax (est.)" value={tax} />
-              </div>
               <div className="mt-5 flex items-center justify-between border-t border-border pt-5">
                 <span className="eyebrow">Total</span>
                 <AnimatedNumber
@@ -131,32 +131,26 @@ function CartPage() {
                   className="text-xl font-semibold tabular-nums text-primary"
                 />
               </div>
+              <button
+                type="button"
+                onClick={orderOnWhatsApp}
+                className="eyebrow mt-6 flex w-full items-center justify-center gap-2 rounded-sm bg-primary py-4 text-center text-primary-foreground transition-opacity duration-200 hover:opacity-90"
+              >
+                <WhatsAppIcon size={16} /> Order on WhatsApp
+              </button>
               <Link
                 to="/checkout"
-                className="eyebrow mt-6 block rounded-sm bg-primary py-4 text-center text-primary-foreground transition-opacity duration-200 hover:opacity-90"
+                className="eyebrow mt-3 block rounded-sm border border-border py-4 text-center transition-colors duration-200 hover:bg-secondary"
               >
-                Proceed to checkout
+                Add delivery details
               </Link>
-              <p className="mt-4 text-center text-[11px] text-muted-foreground">
-                Prototype only — no payment is processed.
+              <p className="mt-4 text-center text-[11px] leading-relaxed text-muted-foreground">
+                Delivery is not included. We share the cost on WhatsApp once we know your location.
               </p>
             </div>
           </aside>
         </div>
       )}
-    </div>
-  );
-}
-
-function Row({ label, value, free }: { label: string; value: number; free?: boolean }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <AnimatedNumber
-        value={value}
-        format={(n) => (free && n === 0 ? "Free" : formatPrice(n))}
-        className="tabular-nums"
-      />
     </div>
   );
 }

@@ -1,35 +1,26 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, Heart, ShoppingBag } from "lucide-react";
 import { useState } from "react";
-import { formatPrice, getProduct, products } from "@/data/products";
+import { formatPrice } from "@/data/products";
+import { useData } from "@/lib/data-store";
 import { useStore } from "@/lib/store";
 import { QtyStepper } from "@/components/QtyStepper";
 import { ProductCard } from "@/components/ProductCard";
+import { WhatsAppIcon } from "@/components/icons";
+import { buildProductMessage, openWhatsApp } from "@/lib/whatsapp";
 import { EASE, Reveal } from "@/components/Reveal";
 
 export const Route = createFileRoute("/product/$id")({
-  loader: ({ params }) => {
-    const product = getProduct(params.id);
-    if (!product) throw notFound();
-    return { product };
-  },
-  head: ({ loaderData }) => {
-    if (!loaderData) {
-      return {
-        meta: [{ title: "Product unavailable — KidaMerch" }, { name: "robots", content: "noindex" }],
-      };
-    }
-    const { product } = loaderData;
-    return {
-      meta: [
-        { title: `${product.name} — KidaMerch` },
-        { name: "description", content: product.description.slice(0, 155) },
-        { property: "og:title", content: `${product.name} — KidaMerch` },
-        { property: "og:description", content: product.description.slice(0, 155) },
-      ],
-    };
-  },
+  head: () => ({
+    meta: [
+      { title: "Product — KIDA" },
+      {
+        name: "description",
+        content: "Independent anime merch in small runs. Order and confirm on WhatsApp.",
+      },
+    ],
+  }),
   notFoundComponent: ProductMissing,
   component: ProductDetail,
 });
@@ -52,21 +43,35 @@ function ProductMissing() {
 }
 
 function ProductDetail() {
-  const { product } = Route.useLoaderData();
+  const { id } = Route.useParams();
+  // Resolved from the live catalogue, which loads asynchronously from Supabase.
+  const { getProductById, storefrontProducts, ready } = useData();
+  const product = getProductById(id);
+
   const { addToCart, isWished, toggleWishlist } = useStore();
   const [imgIndex, setImgIndex] = useState(0);
-  const [variant, setVariant] = useState<string | null>(product.variants[0] ?? null);
+  const [variant, setVariant] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
 
-  const related = products
+  if (!product) {
+    // Still hydrating the catalogue — avoid flashing "not found" on refresh.
+    if (!ready || storefrontProducts.length === 0) {
+      return <div className="min-h-[60svh]" />;
+    }
+    return <ProductMissing />;
+  }
+
+  const activeVariant = variant ?? product.variants[0] ?? null;
+
+  const related = storefrontProducts
     .filter((p) => p.category === product.category && p.id !== product.id)
     .slice(0, 4);
 
   const wished = isWished(product.id);
 
   const handleAdd = () => {
-    addToCart(product, variant, qty);
+    addToCart(product, activeVariant, qty);
     setAdded(true);
     setTimeout(() => setAdded(false), 1400);
   };
@@ -125,12 +130,10 @@ function ProductDetail() {
 
           {product.variants.length > 0 && (
             <div className="mt-9">
-              <p className="eyebrow text-[10px] text-muted-foreground">
-                {product.category === "Prints" ? "Size" : "Select size"}
-              </p>
+              <p className="eyebrow text-[10px] text-muted-foreground">Select size</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {product.variants.map((v: string) => {
-                  const active = v === variant;
+                  const active = v === activeVariant;
                   return (
                     <button
                       key={v}
@@ -195,6 +198,14 @@ function ProductDetail() {
             </button>
             <button
               type="button"
+              disabled={!product.inStock}
+              onClick={() => openWhatsApp(buildProductMessage(product, activeVariant, qty))}
+              className="eyebrow inline-flex h-14 items-center gap-2 rounded-sm border border-primary px-5 text-primary transition-colors duration-200 hover:bg-primary hover:text-primary-foreground disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent"
+            >
+              <WhatsAppIcon size={16} /> Order on WhatsApp
+            </button>
+            <button
+              type="button"
               onClick={() => toggleWishlist(product)}
               aria-pressed={wished}
               className="eyebrow inline-flex h-14 items-center gap-2 rounded-sm border border-border px-5 transition-colors duration-200 hover:bg-secondary"
@@ -214,8 +225,8 @@ function ProductDetail() {
               <dd className="mt-1 font-semibold">{product.inStock ? "In stock" : "Sold out"}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Shipping</dt>
-              <dd className="mt-1 font-semibold">Free over $250</dd>
+              <dt className="text-muted-foreground">Delivery</dt>
+              <dd className="mt-1 font-semibold">Quoted on WhatsApp</dd>
             </div>
           </dl>
         </div>

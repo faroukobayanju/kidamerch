@@ -141,7 +141,10 @@ function OrdersPage() {
               </thead>
               <tbody>
                 {rows.map((o) => (
-                  <tr key={o.id} className="border-b border-border last:border-0 hover:bg-secondary/40">
+                  <tr
+                    key={o.id}
+                    className="border-b border-border last:border-0 hover:bg-secondary/40"
+                  >
                     <td className="px-3 py-3">
                       <Link
                         to="/admin/orders/$id"

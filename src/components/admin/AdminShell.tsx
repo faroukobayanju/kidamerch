@@ -2,7 +2,6 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
   Boxes,
-  CalendarDays,
   ChartNoAxesCombined,
   ExternalLink,
   LayoutDashboard,
@@ -15,8 +14,10 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { ThemeToggle } from "@/components/theme";
+import { Logo } from "@/components/Logo";
 import { EASE } from "@/components/Reveal";
 import { useData } from "@/lib/data-store";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { btnGhost } from "@/components/admin/parts";
 
 const nav = [
@@ -26,7 +27,6 @@ const nav = [
   { to: "/admin/orders", label: "Orders", icon: ReceiptText },
   { to: "/admin/inventory", label: "Inventory", icon: Boxes },
   { to: "/admin/customers", label: "Customers", icon: Users },
-  { to: "/admin/events", label: "Events", icon: CalendarDays },
   { to: "/admin/insights", label: "Insights", icon: ChartNoAxesCombined },
 ] as { to: string; label: string; icon: typeof Package; exact?: boolean }[];
 
@@ -59,13 +59,8 @@ export function AdminShell({
         className="mb-4 flex items-center gap-2 px-2 py-2"
         onClick={() => setMobileNav(false)}
       >
-        <span className="grid h-8 w-8 place-items-center rounded-sm bg-primary text-[13px] font-black text-primary-foreground">
-          K
-        </span>
-        <span className="leading-tight">
-          <span className="block text-sm font-semibold tracking-tight">KidaMerch</span>
-          <span className="eyebrow block text-[9px] text-muted-foreground">Operations</span>
-        </span>
+        <Logo className="h-12 w-auto" />
+        <span className="eyebrow text-[9px] text-muted-foreground">Operations</span>
       </Link>
 
       {nav.map((item) => {
@@ -110,7 +105,7 @@ export function AdminShell({
         </Link>
         <button
           type="button"
-          onClick={logout}
+          onClick={() => void logout()}
           className="flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
         >
           <LogOut size={16} />
@@ -163,9 +158,7 @@ export function AdminShell({
             <div className="hidden items-center gap-2 sm:flex">{actions}</div>
             <ThemeToggle />
           </div>
-          {actions && (
-            <div className="flex items-center gap-2 px-4 pb-3 sm:hidden">{actions}</div>
-          )}
+          {actions && <div className="flex items-center gap-2 px-4 pb-3 sm:hidden">{actions}</div>}
         </header>
 
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 md:px-6 md:py-8">
@@ -181,9 +174,23 @@ export function AdminShell({
 
 export function AdminLogin() {
   const { login } = useData();
-  const [email, setEmail] = useState("admin@store.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.includes("@") || password.length < 6) {
+      setError("Enter your email and a password of at least 6 characters.");
+      return;
+    }
+    setError("");
+    setBusy(true);
+    const result = await login(email, password);
+    setBusy(false);
+    if (!result.ok) setError(result.error ?? "Sign in failed.");
+  };
 
   return (
     <div className="grid min-h-screen place-items-center bg-surface-2 px-4">
@@ -191,22 +198,15 @@ export function AdminLogin() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!email.includes("@") || password.length < 4) {
-            setError("Enter any email and a password of 4+ characters.");
-            return;
-          }
-          login(email, password);
-        }}
+        onSubmit={submit}
         className="w-full max-w-sm rounded-md border border-border bg-surface p-7 shadow-lift"
       >
-        <span className="grid h-9 w-9 place-items-center rounded-sm bg-primary text-sm font-black text-primary-foreground">
-          K
-        </span>
+        <Logo className="h-11 w-auto" />
         <h1 className="mt-5 text-xl font-semibold tracking-tight">Admin sign in</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Mock authentication — any credentials work.
+          {isSupabaseConfigured
+            ? "Restricted to authorised KIDA accounts."
+            : "Supabase not configured — local development mode."}
         </p>
 
         <label className="mt-6 block">
@@ -232,9 +232,10 @@ export function AdminLogin() {
 
         <button
           type="submit"
-          className="mt-6 h-11 w-full rounded-sm bg-primary text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+          disabled={busy}
+          className="mt-6 h-11 w-full rounded-sm bg-primary text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Sign in
+          {busy ? "Signing in…" : "Sign in"}
         </button>
         <Link to="/" className={`${btnGhost} mt-3 w-full`}>
           Back to storefront
