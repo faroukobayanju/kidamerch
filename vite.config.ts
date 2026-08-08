@@ -12,4 +12,8 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Build the SSR server for Vercel instead of the default Cloudflare target.
+  // Lovable's own builds force the Cloudflare preset and ignore this, so the
+  // Lovable editor keeps working; it only applies to outside CI such as Vercel.
+  nitro: { preset: "vercel" },
 });
